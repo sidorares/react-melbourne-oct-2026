@@ -1,0 +1,266 @@
+export const section = 'One update';
+
+<Slide theme="dark" gap={36} source="steps 5–10 run before the event handler returns, when the last frame has landed">
+
+## One click, from the wire to the pixels
+
+<Grid cols={2} gap="16px 40px">
+<Numbered n="1" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>X server</span> sends a 32-byte ButtonPress
+
+</Numbered>
+<Numbered n="6" tone="orange" variant="box">
+
+<O>flushSyncWork</O>: Counter renders, commit runs
+
+</Numbered>
+<Numbered n="2" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>node-x11 → ntk</span> decode; window emits 'mousedown'
+
+</Numbered>
+<Numbered n="7" tone="orange" variant="box">
+
+<O>commitTextUpdate · commitUpdate</O> → node.applyProps
+
+</Numbered>
+<Numbered n="3" tone="blue" variant="box">
+
+<B>EventManager</B> hit-tests the node tree, front to back
+
+</Numbered>
+<Numbered n="8" tone="blue" variant="box">
+
+<B>invalidate</B>: a damage rect on the window
+
+</Numbered>
+<Numbered n="4" tone="blue" variant="box">
+
+<B>capture → target → bubble</B>, handlers read from props now
+
+</Numbered>
+<Numbered n="9" tone="blue" variant="box">
+
+<B>flush</B>: layout, paint the damage into the back buffer
+
+</Numbered>
+<Numbered n="5" tone="orange" variant="box">
+
+<O>onClick</O> → setN(n + 1) on SyncLane
+
+</Numbered>
+<Numbered n="10" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>ntk</span> CopyArea of just the damaged rects
+
+</Numbered>
+</Grid>
+
+<Cols template="max-content max-content max-content" gap={40}>
+<Small><O>■ React</O></Small>
+<Small><B>■ react-x11</B></Small>
+<Small>■ protocol and toolkit</Small>
+</Cols>
+
+<Notes>
+
+Follow the counter from the start of the talk. The X server sends a ButtonPress, a 32-byte event. node-x11 decodes it; ntk's Window object emits mousedown (and coalesces motion to one per frame). react-x11's EventManager subscribes to each window once, never per element, and reads handlers from node.props at dispatch time, so a handler is never stale. It hit-tests the retained node tree front to back, in paint order, and dispatches a synthetic event with capture and bubble phases.
+
+The handler runs inside runWithPriority(Discrete), so setN lands on SyncLane. The dispatcher's discrete wrapper then calls flushSyncWork, which renders and commits immediately: the text chunk gets commitTextUpdate, nodes whose parents re-rendered get commitUpdate and therefore applyProps. Changed nodes call invalidate, which records a damage rect on the owning window.
+
+Then flushPendingFrames paints right away if the server has shown the previous frame: layout, paint into ntk's back buffer, and present by copying only the damaged rects. All of that happens before the event handler returns.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/node.js:660 (simplified)">
+
+## applyProps: from "changed" to "stale pixels"
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```js
+applyProps(newProps, oldProps) {
+  const prev = this.style;
+  this.props = newProps;
+  const style = this._syncStyle(newProps);
+  const moved = style !== prev &&
+    applyLayoutStyle(this.yoga, style, prev);
+  if (moved) {
+    this._invalidateLayout(reason);
+  } else {
+    const drew =
+      paintPropsChanged(style, prev) ||
+      this.paintChanged(newProps, oldProps);
+    root.invalidate(false,
+      drew ? this : NO_DAMAGE, 'props');
+  }
+}
+```
+
+</Col>
+<Col gap={20}>
+
+<Card variant="rule" tone="blue" title="Something moved">
+
+The layout pass decides, from the old and new rect of each node.
+
+</Card>
+
+<Card variant="rule" tone="orange" title="It draws differently">
+
+One rect: this node's paint bounds.
+
+</Card>
+
+<Card variant="rule" tone="muted" title="Nothing it draws changed">
+
+NO_DAMAGE. No frame is scheduled at all.
+
+</Card>
+
+Style is compared by **value**. Handlers, ref and children never count as paint.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is where commitUpdate lands for every element. The style is resolved first (flattening arrays, theme tokens, the cascade of inherited text properties, the current :hover and :active blocks). If the resolved style object is the same object as before, which is what a hoisted style constant gives you, everything after is skipped.
+
+Otherwise the layout properties are pushed into yoga; applyLayoutStyle reports whether any of them changed. If so, the node cannot know what moved, so it defers to the layout pass. If not, the question is whether anything it draws changed: paint style compared by value (a style React rebuilt with the same contents costs nothing), plus any non-style prop that differs, since that is where a subclass's content lives: an image src, a canvas onDraw, an input value.
+
+Event handlers, ref and children are skipped because they are rebuilt every render and never painted. If nothing it draws changed, it claims NO_DAMAGE, and a commit in which every node says so schedules no frame. Hovering a control that ignores its hover state used to cost a full-window repaint before this rule existed.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/window/flush.js:118">
+
+## Inside one frame: WindowNode.flush()
+
+<Cols template="1fr 560px" gap={40}>
+<Col gap={14}>
+
+<Numbered n="1">
+
+**Animations** advance. A transition claims its rect every tick.
+
+</Numbered>
+
+<Numbered n="2">
+
+**Layout**, if dirty: yoga, content floors, then absolutize.
+
+</Numbered>
+
+<Numbered n="3">
+
+**Layout diff**: each node whose rect changed claims old and new.
+
+</Numbered>
+
+<Numbered n="4">
+
+**Blits**: a pure scroll or a rigid move is copied, not repainted.
+
+</Numbered>
+
+<Numbered n="5">
+
+**Take damage**: up to 4 rects. None named means the whole window.
+
+</Numbered>
+
+<Numbered n="6">
+
+**Paint** one pass per rect: clip, background, culled tree walk.
+
+</Numbered>
+
+<Numbered n="7">
+
+**Present**: ntk copies only the rects that were drawn.
+
+</Numbered>
+
+</Col>
+<Col>
+
+<Card variant="inverse" title="When does it run?">
+
+ntk's <B>requestAnimationFrame</B>: one frame per window, events coalesced into it.
+
+Gated on a <B>fence</B>: the next frame waits until the server reports the last one shown.
+
+That is backpressure for free. A slow server or a slow network gets fewer, bigger frames, not a growing queue.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Every window node owns its own frame. Commits only record damage and ask for a frame; the frame does the expensive work once, however many commits happened since the last one. The order inside it matters. Animations step first because they may change layout.
+
+Layout runs only if something marked it dirty, and the walk that converts yoga's relative positions into absolute window rects (absolutize) doubles as the layout diff: any node whose rect changed claims both its old and new rect, which is how a reflow bounds its own repaint. Then two copy fast paths, covered later. Then the damage list is taken and painted one rect at a time.
+
+Present is ntk's job: it records the clip of every drawing operation as the region it touched and copies only those regions from the back buffer to the window. The frame clock is ntk's requestAnimationFrame, which is fenced on the server, so on a slow link you get fewer frames rather than an ever-growing queue of them.
+
+</Notes>
+</Slide>
+
+<Slide source="src/events.js:313, src/frames.js">
+
+## Answer the input on the event that started it
+
+<Cols template="1fr 600px" gap={40}>
+<Col gap={28}>
+
+<Code size={26}>
+
+```js
+export function discrete(fn) {
+  return (ev) => {
+    fn(ev);               // setState on SyncLane
+    flushSyncWork();      // render + commit now
+    flushPendingFrames(); // paint now
+  };
+}
+```
+
+</Code>
+
+Waiting for the next requestAnimationFrame would add up to a frame plus a round trip, for a paint that costs a fraction of a millisecond.
+
+</Col>
+<Col gap={24}>
+
+<Card title="The frame gate">
+
+A window whose last frame has not been shown keeps its scheduled frame. Spin the wheel: the first notch paints at once, the rest fold into one catch-up frame.
+
+</Card>
+
+<Card title=":active is not React state">
+
+The press state is a style block the renderer repaints on the press, with no re-render.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Perceived latency is measured from the input, not from the work. A discrete event has exactly one visible response (a button darkens, a caret lands), so react-x11 does not route it through the frame clock. When the handler unwinds, discrete() flushes React's sync work and then paints every window that owes a frame and whose server has caught up.
+
+The gate is what keeps a burst sane: a window whose previous frame has not landed keeps the frame it already scheduled, and the extra events coalesce into it.
+
+The other half of answering input is the press state. A Switch toggles on release, because that is what a click is, but the user starts watching on the press. So every control has a distinct pressed look, drawn on the press. The :active style block is resolved by the renderer as a repaint of one node over the whole press chain (the node under the pointer and its ancestors), without a React re-render.
+
+</Notes>
+</Slide>

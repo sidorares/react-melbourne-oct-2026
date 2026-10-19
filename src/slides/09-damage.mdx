@@ -1,0 +1,242 @@
+export const section = 'Damage';
+
+<Slide theme="dark" gap={48}>
+
+## Two reasons pixels go stale
+
+<Grid cols={2} gap={40} style={{ flex: 1 }}>
+<Card variant="top" tone="orange" label="Inside: our state changed" title="The tree no longer matches the screen">
+
+A prop, a hover, a reflow, a scroll, an animation tick.
+
+Every change names what it touched:
+
+<O><Mono>invalidate(layoutChanged, node)</Mono></O>
+
+<Spacer />
+
+**Answer:** repaint the claimed rects.
+
+</Card>
+<Card variant="top" tone="blue" label="Outside: the world changed" title="The screen no longer shows the window">
+
+Another window moved away, the window was resized or mapped.
+
+The X server sends an **Expose** event: the classic onPaint / WM_PAINT.
+
+<Spacer />
+
+**Answer:** copy from the back buffer. React is not involved.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Two different questions get called "repaint" and they have different answers. The first is internal: our own state changed, so the picture of the tree on screen is wrong. Only the renderer knows which part, and the next slides are about how precisely it can say.
+
+The second is external: the picture was right, but the screen lost it, because the window was covered and uncovered, resized or newly mapped.
+
+In the immediate-mode model of classic Xlib or Win32, the application redraws from its state on every Expose or WM_PAINT. With a retained back buffer, most of those become a copy.
+
+</Notes>
+</Slide>
+
+<Slide source="pinned by pixel tests against a full repaint (test/dirty-rect.test.js)">
+
+## What each kind of change claims
+
+| Change                 | Damage claimed                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| colour, text, border   | the node's paint bounds: one rect                                                                                      |
+| identical re-render    | **NO_DAMAGE**: no frame is scheduled at all                                                                            |
+| :hover / :active       | that node, repainted by the renderer, with no React render                                                             |
+| child added or removed | the parent's bounds **before**, captured while the leaving child is still attached, plus the same bounds after layout |
+| layout moved things    | the layout diff: old and new rect of every node that moved, and nothing else                                           |
+| scroll                 | CopyArea the band that stays visible, paint only the strip that appeared                                               |
+| animation tick         | the node's rect on every frame, including the last one                                                                 |
+| nothing named          | the whole window: the safe default when a caller can't say                                                             |
+
+<Notes>
+
+Each row is a rule with a test behind it, and most of them were found by watching a debug log print FULL WINDOW while hovering a control. A paint-only change claims the node's paint bounds, which include shadows and outlines. An identical re-render claims nothing and schedules no frame. Hover and active are style blocks the renderer applies as a repaint of one node.
+
+A child-list change has a subtle half: the before-rect must be captured while the departing child is still attached, otherwise the region it used to cover is never erased. Layout changes are never bounded by the node that changed, because a reflow can move anything; instead the layout pass diffs every node's old and new rect.
+
+Scrolls get a copy fast path. Animations claim every frame including the last. And a claim that names no node repaints the whole window, deliberately: forgetting costs speed, not correctness.
+
+Set REACT_X11_DEBUG_PAINT=1 to flash damage rects on screen, or =full to get a warning with a stack trace for every full-window repaint.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="src/nodes/damage.js · Cocoa keeps 16, its passes are cheaper">
+
+## Damage is a list of rects, not one box
+
+<DamageRects />
+
+<Grid cols={3} gap={24}>
+<Card title="Capped at 4">
+
+Each rect is a full tree walk. Over the cap, the cheapest pair merges.
+
+</Card>
+<Card title="Overlaps merge">
+
+A translucent node inside two rects would be painted twice.
+
+</Card>
+<Card title="Nearly full? One box">
+
+Rects must save 25% of their box to be painted separately.
+
+</Card>
+</Grid>
+
+<Notes>
+
+A ticker in the top-left and a status line in the bottom-right change in the same frame. A single damage box around them is nearly the whole window, so everything between them repaints. A list keeps them apart: two passes, each clipped to its own rect, each culling everything that does not reach it.
+
+The list is capped at four on X11 because each rect costs a whole extra walk of the tree plus a clip; when it overflows, the pair whose merge leaves the least area to paint is merged. Overlapping rects are always merged, not for tidiness but for correctness: a translucent node inside two rects would blend over itself. And if the rects cover most of the box around them (the threshold is 75%), the frame paints the box instead.
+
+Why clip each pass to one rectangle instead of one clip with several: ntk's server-side clip fast path only recognises a single rectangle; anything else falls back to rasterizing a full-surface mask.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/paint.js:341 and :553 (simplified)">
+
+## Clip the pixels, cull the drawing
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```js
+for (const rect of damage) { // ≤ 4 rects
+  ctx.save();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  ctx.clip(); // ntk records this as "touched"
+  fillBackground(ctx, rect);
+  this._paintChildren(ctx);
+  ctx.restore();
+}
+
+_paintChildren(ctx) {
+  for (const child of this.paintOrder()) { // zIndex
+    if (child._outsideDamage()) continue;
+    child.paint(ctx);
+  }
+}
+```
+
+</Col>
+<Col gap={24}>
+
+**A clip bounds pixels, not requests.** Clipped-away drawing is still built, sent and composited through a mask.
+
+**Culling is the saving.** A subtree whose reach misses the rect is skipped whole.
+
+**Reach, not rect.** A child can draw outside a parent that doesn't clip, so cull on the subtree's bounds, cached per node.
+
+**The clip reports damage.** ntk presents exactly the clipped areas.
+
+</Col>
+</Cols>
+
+<Notes>
+
+Each damage rect gets one pass. The pass clips to the rect, fills the window background inside it, and walks the tree in paint order (document order, sorted by zIndex only when a key disagrees).
+
+The important line is the cull: a child whose subtree cannot reach the damage rect is skipped entirely, children and all. That is where the protocol savings come from. A clip alone would still put every request on the wire; the server would just throw the pixels away afterwards, through a mask.
+
+The cull uses the subtree's paint reach, not the node's own rect, because a child of a parent that does not clip can draw outside it; reach is cached per node and every route that can change it has to drop the cache.
+
+Last, the clip doubles as the damage report to ntk: it takes each operation's clip as the region that operation could have touched, and at present time copies only those regions from the back buffer to the window.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="ntk lib/window.js _handleExpose; src/nodes/window/listeners.js:87; onExpose prop still fires">
+
+## Expose: when the world damages the window
+
+<Cols template="1fr 560px" gap={40}>
+<Col>
+
+```js
+// ntk Window, on Expose(x, y, w, h)
+if (this._backingValid)
+  X.CopyArea(backing, this.id, gc, x, y, x, y, w, h);
+else
+  this._requestRedraw(); // 'draw' next frame
+
+// react-x11 WindowNode
+wnd.on('draw', () => {
+  this._frameReasons.add('expose');
+  this.needsPaint = true; // no rect: everything
+  this.flush();
+});
+```
+
+While a resize is in flight, **backgroundPixel** is the theme's background, so the server's fill is already the right colour.
+
+</Col>
+<Col gap={24}>
+<Card variant="rule" tone="muted" title="Immediate mode">
+
+Classic Xlib, Win32: every Expose or WM_PAINT asks the app to redraw that rect from its state.
+
+</Card>
+<Card variant="rule" tone="blue" title="Retained, double-buffered">
+
+A valid back buffer answers with a copy. The tree repaints only when the buffer itself is lost: first map, resize.
+
+</Card>
+</Col>
+</Cols>
+
+<Notes>
+
+This is the onPaint question. In the immediate-mode model the server keeps nothing for you; every Expose means draw that rectangle again from your state. ntk keeps a back buffer per window, a server-side pixmap the size of the window that every frame is drawn into, so an Expose is answered with a CopyArea from that pixmap and nothing above ntk ever hears about it.
+
+Only when the back buffer is not valid (it was just created on the first map, or reallocated after a resize) does ntk ask for a redraw. It emits draw on its next frame, and WindowNode treats that as damage with no rect, which means the whole window, recorded with reason expose so the debug tools can say why.
+
+There is one more trick for resizes: when the window grows, the server fills the new area before the app has drawn it. react-x11 sets the window's X background pixel to the theme's background colour at creation, so that fill is already the right colour and a dark theme does not flash white.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/scrollblit.js · REACT_X11_NO_SCROLL_BLIT=1 turns it off for A/B">
+
+## A scroll is a copy plus a strip
+
+<Cols template="auto 1fr" gap={56} align="center">
+
+<ScrollBlit />
+
+<Col gap={22}>
+
+<B>■</B> **copied**: one CopyArea inside the back buffer. <O>■</O> **painted**: the strip that scrolled in, plus the scrollbar.
+
+Per wheel notch on a 500-row list: **44 requests, 0.065 Mpx** instead of 89 and 0.33.
+
+A virtualized list mounts rows inside the viewport every frame. A per-frame **ledger** repaints those after the copy: ten notches cost 284 requests instead of 785.
+
+Invariant, pinned by a pixel test: the blitted frame is **byte-identical** to a full repaint.
+
+</Col>
+</Cols>
+
+<Notes>
+
+Scrolling is the one layout change that carries a bound: it moves an offset inside one viewport and nothing else, at input rate. When a frame is a pure single-axis scroll of one viewport, the band that stays visible is copied inside ntk's back buffer with one CopyArea (Window.scrollRegion), and the frame's damage narrows to the strip that came into view plus the scrollbar.
+
+Everything about it is a gate that falls back to a normal repaint: fractional or diagonal deltas, page-sized jumps, overlapping non-descendants.
+
+The hard case was the virtualized list, whose own commit mounts rows and resizes spacers inside the viewport on every scroll frame, which used to disable the fast path after the first notch. Now those claims go into a per-frame ledger on the scrolling node and are repainted after the copy.
+
+The rule that keeps it honest: a pixel test asserts every blitted frame is byte-identical to the full repaint it replaced, and the benchmark baseline is recorded with the blit on, so a change that silently stopped it firing fails the check.
+
+</Notes>
+</Slide>

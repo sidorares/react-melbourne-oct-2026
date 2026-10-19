@@ -1,0 +1,24 @@
+export const section = 'Intro';
+
+<Slide theme="dark" layout="statement" bar>
+
+<p className="mono b" style={{ fontSize: 30 }}>{'<window> <box> <text>'}</p>
+
+# React without the DOM
+
+<Lead>How react-x11 turns a reconciler, a layout engine and the X11 protocol into desktop apps</Lead>
+
+<Spacer />
+
+<p style={{ color: 'var(--fg-muted)' }}>Andrey Sidorov · React Melbourne · October 2026</p>
+
+<Notes>
+
+Opening. This talk is about what a custom React renderer actually does, using react-x11 as the worked example. react-x11 renders React to native desktop windows: X11 on Linux (and over the network), Cocoa on macOS, win32 and Wayland.
+
+Live demos happen here, before any more slides.
+
+Then two halves: first the React side (the reconciler contract, render vs commit, priorities), then the renderer side (which elements become native windows, which are painted, and how we decide what to repaint).
+
+</Notes>
+</Slide>

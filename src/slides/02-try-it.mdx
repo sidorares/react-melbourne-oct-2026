@@ -1,0 +1,255 @@
+export const section = 'Try it';
+
+<Slide source="examples/README.md · website: Getting started">
+
+## Follow along: install
+
+<Cols template="1fr 600px" gap={48}>
+<Col>
+
+<Code size={30}>
+
+```bash
+$ mkdir hello-x11 && cd hello-x11
+$ npm init -y
+$ npm pkg set type=module
+$ npm install react-x11 react
+$ npm install -D tsx   # or use bun
+```
+
+</Code>
+
+<Card variant="rule" tone="orange" title={<>Why <Mono>type=module</Mono></>}>
+
+The examples use top-level **await**. npm init writes "commonjs", and tsx then stops with "Top-level await is currently not supported with the cjs output format". Bun doesn't mind.
+
+</Card>
+
+</Col>
+<Col gap={20}>
+
+**Node 20.19+.** Nothing compiles: the X11 protocol is JavaScript, layout is WASM, native bridges come prebuilt.
+
+| On        | You get                    |
+| --------- | -------------------------- |
+| macOS     | a native Cocoa window      |
+| Linux     | X11 on your $DISPLAY       |
+| Windows   | the win32 backend (young)  |
+| ssh -X    | the window on your laptop  |
+| no laptop | the browser playground     |
+
+<p className="mono b" style={{ fontSize: 24 }}>sidorares.github.io/react-x11/playground</p>
+
+</Col>
+</Cols>
+
+<Notes>
+
+After the demos: get it running on your own machine, it takes a minute. Five commands.
+
+The one people trip over is `npm pkg set type=module`. The examples call `await createRoot()` at the top level of the file, which needs an ES module, and npm init writes `"type": "commonjs"` by default these days; tsx then refuses with a clear error about top-level await and the cjs output format. Bun runs a .jsx file directly and does not care either way, so if you have Bun, skip tsx entirely.
+
+Requirements: Node 20.19 or newer. There is nothing to compile: node-x11 and ntk are pure JavaScript, yoga is WebAssembly, and the macOS and Windows bridges are prebuilt optional dependencies. On a Mac you get a native Cocoa window, on Linux an X11 window on your display, on Windows the young win32 backend; and if you ssh -X into a Linux box, the window appears on your laptop, drawn over the network. No machine at all: the playground on the docs site runs the real renderer with an X server written in JavaScript in the page.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/hello.jsx · screenshot rendered by this exact file; the default theme follows the desktop's light or dark mode">
+
+## Hello world: <Mono>hello.jsx</Mono>
+
+<Cols template="1030px 1fr" gap={40}>
+<Col>
+
+```jsx
+import React from 'react';
+import { createRoot } from 'react-x11';
+
+function App() {
+  return (
+    <window title="hello" width={360} height={180}>
+      <box style={{ flexGrow: 1,
+        alignItems: 'center', justifyContent: 'center' }}>
+        <text style={{ fontSize: 24 }}>hello from react-x11</text>
+      </box>
+    </window>
+  );
+}
+
+const root = await createRoot();
+root.render(<App />);
+```
+
+</Col>
+<Col>
+
+<Shot src="img/hello.png" alt="The hello window: 'hello from react-x11' centred on a dark grey background" width={540} height={270} />
+
+<Code size={26}>
+
+```bash
+$ npx tsx hello.jsx
+$ bun hello.jsx
+```
+
+</Code>
+
+<Small>Only <O>{'<window>'}</O> is a real window. The rest is drawn into it.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Type this, or paste it. Three host elements: window, box and text. A window is a real window of the operating system; box is a flexbox container laid out by yoga; text is a run of text, and raw strings are only allowed inside it.
+
+Styles go in the style prop, never as flat props, and mostly mean what CSS means: flexGrow, alignItems, justifyContent. The window's width and height are props, not style, because they are the real window's geometry.
+
+createRoot connects to whatever this machine has, Cocoa on a Mac and X11 elsewhere, and render mounts synchronously. Run it with npx tsx, or with bun. The screenshot is exactly this file, rendered headlessly; the dark background is the default theme following the desktop's dark mode.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/counter.jsx · run: npx tsx counter.jsx">
+
+<h2 style={{ width: 1400 }}>Step 2: state, and a press you can see</h2>
+
+<Shot src="img/counter.png" alt="The counter window: the number 1 above a blue +1 button" width={200} height={120} style={{ position: 'absolute', left: 1592, top: 72 }} />
+
+<Cols template="640px 1fr" gap={16}>
+<Col>
+
+<Code pad={24}>
+
+```jsx
+import React, { useState } from 'react';
+import { createRoot } from 'react-x11';
+
+function Counter() {
+  const [n, setN] = useState(0);
+  return (
+    <window title="counter"
+      width={300} height={180}>
+      <box style={s.center}>
+        <text style={s.big}>{n}</text>
+        <box style={s.button}
+          onClick={() => setN(n + 1)}>
+          <text style={s.label}>+1</text>
+        </box>
+      </box>
+    </window>
+  );
+}
+```
+
+</Code>
+
+</Col>
+<Col gap={20}>
+
+<Code pad={24}>
+
+```jsx
+const s = {
+  center: { flexGrow: 1, gap: 16,
+    alignItems: 'center', justifyContent: 'center' },
+  big: { fontSize: 40 },
+  label: { color: 'white', fontSize: 18 },
+  button: {
+    backgroundColor: '#2563eb', borderRadius: 8, padding: 12,
+    ':hover': { backgroundColor: '#1d4ed8' },
+    ':active': { backgroundColor: '#1e3a8a' },
+  },
+};
+
+const root = await createRoot();
+root.render(<Counter />);
+```
+
+</Code>
+
+<Small><O>:hover</O> and <O>:active</O> are repainted by the renderer, with no React render. Hold the mouse down and watch.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Step two adds state and a button. Nothing here is react-x11 specific on the React side: useState, an onClick handler, a re-render.
+
+Two things are worth pointing out. The button is just a box with an onClick: events are hit-tested against the node tree and bubble like the DOM. And the style has :hover and :active blocks: those are applied by the renderer as a repaint of that one box, not by React state, so they appear on the press itself.
+
+Hold the mouse button down on +1 and the button darkens before you release; the count changes on release, because that is when a click is. That is the "answer the input, not the outcome" rule from the design notes, and it is the kind of thing worth trying on your own machine.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/todo.jsx · run: npx tsx todo.jsx · ev.value is the text after the edit">
+
+<h2 style={{ width: 1400 }}>Step 3: an input and a list</h2>
+
+<Shot src="img/todo.png" alt="The todo window: a text field reading 'Ask quest' above two bullet items, 'Try react-x11' and 'Show the demo'" width={144} height={120} style={{ position: 'absolute', left: 1648, top: 72 }} />
+
+<Cols template="640px 1fr" gap={16}>
+<Col gap={20}>
+
+<Code pad={24}>
+
+```jsx
+import React, { useState } from 'react';
+import { createRoot } from 'react-x11';
+
+function Todo() {
+  const [items, setItems] =
+    useState(['Try react-x11']);
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    if (!draft.trim()) return;
+    setItems([...items, draft]);
+    setDraft('');
+  };
+```
+
+</Code>
+
+<Small>A controlled <O>{'<textinput>'}</O>: **onChange** per edit, **onSubmit** on Enter. Undo, selection, copy and paste are built in.</Small>
+
+</Col>
+<Col>
+
+<Code pad={24}>
+
+```jsx
+  return (
+    <window title="todo" width={360} height={300}>
+      <box style={{ flexGrow: 1, padding: 16, gap: 10 }}>
+        <textinput value={draft} onSubmit={add}
+          placeholder="What next? Press Enter"
+          onChange={(ev) => setDraft(ev.value)}
+          style={{ padding: 8, borderRadius: 6,
+                   borderWidth: 1, borderColor: '#888' }} />
+        {items.map((item, i) => <text key={i}>• {item}</text>)}
+      </box>
+    </window>
+  );
+}
+
+const root = await createRoot();
+root.render(<Todo />);
+```
+
+</Code>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Step three is a tiny to-do list, the classic. A controlled textinput: value comes from state, onChange gets a synthetic event whose value is the text after the edit, and onSubmit fires on Enter.
+
+Everything a native text field should do comes for free: caret and selection with the mouse, double-click to select a word, undo and redo, copy and paste through the system clipboard, a right-click edit menu. The list is plain React: map over an array and render a text per item.
+
+Things to try once it runs: type something and press Enter; drag-select inside the field; resize the window and watch flexbox reflow; and on Linux, run it over ssh -X from another machine.
+
+</Notes>
+</Slide>

@@ -1,0 +1,701 @@
+/* Slide styling. Everything is in canvas pixels (1920×1080). */
+
+:root {
+  --dark: #14181f;
+  --dark-2: #232934;
+  --dark-3: #1b2029;
+  --light: #f3f1eb;
+  --card: #fbfaf6;
+  --line: #d6d1c4;
+  --sand: #e4e0d6;
+  --ink: #1a1f27;
+  --body: #4a5260;
+  --muted: #5d6470;
+  --code-bg: #1e232c;
+  --code-ink: #e3e6eb;
+  --blue: #1f6fa8;
+  --orange: #a84b0c;
+  --cyan: #5cc8e0;
+  --amber: #f0a050;
+  --accent-bg: #e8873a;
+  --body-dark: #bcc3cd;
+  --muted-dark: #8a93a0;
+  --sans: 'IBM Plex Sans', Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+/* ---------- the slide ---------- */
+
+.slide {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 128px;
+  font-family: var(--sans);
+  font-size: 30px;
+  line-height: 1.4;
+  text-align: left;
+}
+.slide--has-footer {
+  padding-bottom: 160px;
+}
+.slide--statement {
+  justify-content: center;
+  gap: 56px;
+}
+
+.slide--light {
+  --fg: var(--ink);
+  --fg-body: var(--body);
+  --fg-muted: var(--muted);
+  --o: var(--orange);
+  --b: var(--blue);
+  --panel: var(--card);
+  --panel-line: var(--line);
+  --table-head: var(--sand);
+  background: var(--light);
+  color: var(--fg);
+}
+.slide--dark {
+  --fg: var(--light);
+  --fg-body: var(--body-dark);
+  --fg-muted: var(--muted-dark);
+  --o: var(--amber);
+  --b: var(--cyan);
+  --panel: var(--dark-2);
+  --panel-line: var(--dark-2);
+  --table-head: var(--dark-2);
+  background: var(--dark);
+  color: var(--fg);
+}
+.slide--accent {
+  --fg: var(--dark);
+  --fg-body: var(--dark);
+  --fg-muted: var(--dark);
+  --o: var(--dark);
+  --b: var(--dark);
+  background: var(--accent-bg);
+  color: var(--fg);
+}
+
+.slide :where(h1, h2, h3, p, ul, ol, table, pre) {
+  margin: 0;
+}
+.slide h1 {
+  font-size: 112px;
+  font-weight: 600;
+  line-height: 1.05;
+  max-width: 1600px;
+}
+.slide h2 {
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.slide h3 {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.slide p,
+.slide li {
+  color: var(--fg-body);
+}
+.slide b,
+.slide strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.slide ul,
+.slide ol {
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.slide a {
+  color: var(--b);
+}
+
+.slide__footer {
+  position: absolute;
+  left: 128px;
+  right: 128px;
+  bottom: 64px;
+  font-size: 24px;
+  color: var(--fg-muted) !important;
+}
+.slide__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 1080px;
+  background: var(--amber);
+}
+.slide--light .slide__bar {
+  background: var(--accent-bg);
+}
+
+/* ---------- inline ---------- */
+
+.slide .o {
+  color: var(--o) !important;
+}
+.slide .b {
+  color: var(--b) !important;
+}
+.mono,
+.slide code:not(pre code) {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.tone--orange {
+  --tone: var(--o);
+}
+.tone--blue {
+  --tone: var(--b);
+}
+.tone--muted {
+  --tone: var(--fg-muted);
+}
+
+/* ---------- blocks ---------- */
+
+.cols {
+  display: grid;
+  min-width: 0;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid {
+  display: grid;
+}
+
+.lead {
+  font-size: 44px;
+  line-height: 1.3;
+  max-width: 1500px;
+}
+.small {
+  font-size: 24px !important;
+  color: var(--fg-muted) !important;
+}
+.eyebrow {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--tone, var(--fg-muted)) !important;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 16px;
+}
+.card p,
+.card li {
+  font-size: 26px;
+}
+.card__label {
+  font-size: 24px !important;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--tone, var(--fg-muted)) !important;
+}
+.card__title {
+  color: var(--tone, var(--fg));
+}
+.card--panel,
+.card--top {
+  padding: 32px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+}
+.card--panel .card__title,
+.card--top .card__title {
+  color: var(--fg);
+}
+.card--panel.tone--blue .card__title,
+.card--panel.tone--orange .card__title {
+  color: var(--tone);
+}
+.card--top {
+  border-top: 8px solid var(--tone, var(--fg-muted));
+}
+.card--rule {
+  padding: 4px 0 4px 24px;
+  border-left: 6px solid var(--tone, var(--b));
+  border-radius: 0;
+}
+.card--rule .card__title {
+  color: var(--fg);
+}
+.card--line {
+  padding: 24px 0 0;
+  border-top: 4px solid var(--tone, var(--fg-muted));
+  border-radius: 0;
+}
+.card--inverse {
+  padding: 32px;
+  background: var(--code-bg);
+  --fg: var(--light);
+  --fg-body: var(--body-dark);
+  --fg-muted: var(--muted-dark);
+  --o: var(--amber);
+  --b: var(--cyan);
+  color: var(--light);
+}
+.card--inverse .card__title {
+  color: var(--tone, var(--light));
+}
+.card--inverse-top {
+  padding: 20px;
+  background: #3a2a1c;
+  border-top: 6px solid var(--amber);
+  --fg: var(--light);
+  --fg-body: #e8d3bf;
+  color: var(--light);
+}
+.card .stat__value {
+  font-size: 64px;
+}
+.card .stat__label {
+  font-size: 24px;
+}
+.card--dense {
+  gap: 8px;
+  padding: 24px 32px;
+}
+.card--dense p,
+.card--dense li {
+  font-size: 24px;
+}
+.card--dense .card__title {
+  font-size: 30px;
+}
+.card--dashed {
+  padding: 32px;
+  border: 2px dashed var(--fg-muted);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat__value {
+  font-size: 64px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--tone) !important;
+}
+.stat__label {
+  font-size: 24px !important;
+  line-height: 1.35;
+}
+
+.numbered {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.numbered__n {
+  width: 44px;
+  flex: none;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--tone) !important;
+}
+.numbered__body {
+  flex: 1;
+  min-width: 0;
+}
+.numbered__body p {
+  font-size: 28px;
+}
+.numbered--box {
+  padding: 16px 24px;
+  border-radius: 12px;
+  background: var(--panel);
+}
+.numbered--box .numbered__body p {
+  font-size: 26px;
+}
+.slide--dark .numbered--box.tone--orange {
+  background: #3a2a1c;
+}
+.slide--dark .numbered--box.tone--blue {
+  background: #1e3540;
+}
+.numbered--lg {
+  gap: 40px;
+  align-items: flex-start;
+}
+.numbered--lg .numbered__n {
+  width: 80px;
+  font-size: 64px;
+  line-height: 1;
+}
+.numbered--lg .numbered__body p {
+  font-size: 36px;
+  line-height: 1.35;
+  color: var(--fg);
+}
+
+.layer {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  padding: 18px 32px;
+  border-radius: 12px;
+  background: var(--panel);
+}
+.layer__name {
+  width: 420px;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 28px;
+  color: var(--tone, var(--b)) !important;
+}
+.layer__text {
+  flex: 1;
+  font-size: 28px;
+}
+.layer.tone--orange {
+  background: #3a2a1c;
+  outline: 2px solid var(--o);
+}
+.layer.tone--orange .layer__text {
+  color: var(--fg) !important;
+}
+.layer--dashed {
+  background: var(--dark-3);
+  outline: 2px dashed var(--muted);
+}
+.layer--dashed p {
+  color: var(--fg-muted) !important;
+}
+
+.shot {
+  display: block;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(20, 24, 31, 0.25);
+}
+
+/* ---------- builds: <Step> ---------- */
+
+/* a block build adds no box: its children stay items of the parent's flex
+   or grid. visibility is inherited, so hiding the wrapper hides them while
+   keeping their space; opacity is not, so the fade is set on them */
+.build--block {
+  display: contents;
+}
+.build--block > *,
+.build--inline {
+  transition: opacity 220ms ease;
+}
+.build.is-hidden {
+  visibility: hidden;
+}
+.build--block.is-hidden > *,
+.build--inline.is-hidden {
+  opacity: 0;
+}
+.build--block.is-dim > *,
+.build--inline.is-dim {
+  opacity: 0.3;
+}
+
+/* ---------- code ---------- */
+
+.slide pre {
+  padding: var(--code-pad, 28px 36px);
+  border-radius: 16px;
+  background: var(--code-bg) !important;
+  font-family: var(--mono);
+  font-size: var(--code-size, 24px);
+  line-height: 1.45;
+  white-space: pre;
+  overflow: hidden;
+}
+.slide pre code {
+  font-family: inherit;
+}
+.slide pre,
+.mono,
+.slide code {
+  /* JetBrains Mono's ligatures draw => as ⇒ and fuse </; code on a slide
+     should read as the characters someone would type */
+  font-variant-ligatures: none;
+  font-feature-settings: 'calt' 0, 'liga' 0;
+}
+.slide--dark pre {
+  background: var(--dark-2) !important;
+}
+
+/* ---------- tables ---------- */
+
+.slide table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 24px;
+  line-height: 1.35;
+}
+.slide th,
+.slide td {
+  padding: 10px 16px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--panel-line);
+}
+.slide th {
+  background: var(--table-head);
+  color: var(--fg);
+  font-weight: 600;
+}
+.slide td {
+  color: var(--fg);
+}
+.slide td[align='right'],
+.slide th[align='right'] {
+  text-align: right;
+}
+.slide tr.hl-blue td {
+  background: rgba(31, 111, 168, 0.1);
+}
+.slide tr.hl-orange td {
+  background: rgba(232, 135, 58, 0.18);
+}
+.slide table.mono-first td:first-child,
+.slide td.mono {
+  font-family: var(--mono);
+}
+.slide table.big {
+  font-size: 26px;
+}
+
+/* ---------- diagrams ---------- */
+
+/* InterruptTimeline */
+.tl {
+  position: relative;
+  width: 1664px;
+  height: 280px;
+}
+.tl p {
+  position: absolute;
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.35;
+}
+.tl__lane {
+  left: 0;
+  top: 124px;
+  color: var(--fg-muted) !important;
+}
+.tl__note {
+  color: var(--tone, var(--fg-body)) !important;
+}
+.tl__slice,
+.tl__block {
+  position: absolute;
+  top: 100px;
+  height: 80px;
+  border-radius: 8px;
+  background: #2b5f73;
+}
+.tl .tl__block {
+  top: 100px;
+  height: 80px;
+  line-height: 80px;
+  text-align: center;
+  color: var(--dark) !important;
+}
+.tl__block--sync {
+  background: #c8742e;
+}
+.tl__block--commit {
+  background: var(--amber);
+}
+.tl__block--commit2 {
+  background: var(--cyan);
+}
+.tl__discard {
+  position: absolute;
+  left: 222px;
+  top: 90px;
+  width: 548px;
+  height: 100px;
+  border: 3px dashed var(--amber);
+  border-radius: 12px;
+}
+.tl__marker {
+  position: absolute;
+  left: 782px;
+  top: 10px;
+  width: 4px;
+  height: 190px;
+  background: var(--amber);
+}
+
+/* DamageRects */
+.dmg {
+  display: grid;
+  grid-template-columns: 800px 800px;
+  gap: 64px;
+}
+.dmg__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dmg__caption {
+  font-size: 26px;
+}
+.dmg__window {
+  position: relative;
+  width: 800px;
+  height: 340px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.dmg__bar,
+.dmg__node,
+.dmg__rect {
+  position: absolute;
+}
+.dmg__bar {
+  height: 24px;
+  border-radius: 4px;
+  background: var(--sand);
+}
+.dmg__node {
+  height: 56px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+.dmg__rect {
+  border: 3px dashed var(--blue);
+  border-radius: 6px;
+}
+
+/* ScrollBlit */
+.blit {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+.blit__side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.blit__viewport {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 340px;
+  height: 500px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+}
+.blit__row {
+  height: 48px;
+  flex: none;
+  padding: 0 16px;
+  border-radius: 6px;
+  background: var(--sand);
+  font-size: 24px;
+  line-height: 48px;
+  color: var(--body) !important;
+}
+.blit__row--copied {
+  background: #cfe0ec;
+  color: var(--ink) !important;
+}
+.blit__row--painted {
+  background: #f2c9a4;
+  color: var(--ink) !important;
+}
+.blit__arrow {
+  width: 72px;
+  height: 40px;
+  background: var(--muted);
+  clip-path: polygon(0 30%, 60% 30%, 60% 0, 100% 50%, 60% 100%, 60% 70%, 0 70%);
+}
+
+/* BidiRows */
+.bidi {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.bidi__row {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
+.bidi__label {
+  width: 220px;
+  font-size: 24px !important;
+  color: var(--fg-muted) !important;
+}
+.bidi__chars {
+  display: flex;
+  gap: 6px;
+  direction: ltr;
+}
+.bidi__ch {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  background: var(--sand);
+  font-size: 34px;
+  line-height: 60px;
+  text-align: center;
+  color: var(--ink) !important;
+  unicode-bidi: isolate;
+}
+.bidi__ch--rtl {
+  background: #f2c9a4;
+}
+
+/* QualityLadder */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ladder__row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.ladder__n {
+  width: 40px;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--o) !important;
+}
+.ladder__rung {
+  padding: 14px 20px;
+  border-radius: 8px;
+  font-size: 24px;
+}

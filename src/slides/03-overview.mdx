@@ -1,0 +1,66 @@
+export const section = 'Intro';
+
+<Slide gap={48} source="screenshot: examples/tasks.jsx, rendered headlessly into an in-process X server">
+
+## React, rendered to native windows
+
+<Cols template="1fr 600px" gap={64} align="stretch">
+<Col gap={32}>
+
+- Same React, same hooks. The host elements are **{'<window>'}**, **{'<box>'}**, **{'<text>'}**, **{'<image>'}**, **{'<canvas>'}**, **{'<textinput>'}**…
+- Four backends: X11 (pure-JS protocol, works over the network), Cocoa, win32, Wayland
+- No DOM, no browser, no Electron
+
+```jsx
+<window title="counter" width={240} height={120}>
+  <box style={{ padding: 8, ':hover': {…} }}
+       onClick={() => setN(n + 1)}>
+    <text>+1</text>
+  </box>
+</window>
+const root = await createRoot(); root.render(<Counter />);
+```
+
+</Col>
+<Col justify="center" style={{ alignItems: 'center', background: 'var(--sand)', borderRadius: 16, padding: 24 }}>
+
+<Shot src="img/tasks.png" alt="The react-x11 tasks example: a task list with a text input, filter buttons and checkboxes" width={546} height={520} />
+
+</Col>
+</Cols>
+
+<Notes>
+
+react-x11 is a renderer in the same sense react-dom and react-native are: React itself is unchanged, and what differs is what the host elements turn into. Here they are windows and painted boxes rather than DOM nodes.
+
+The X11 backend speaks the protocol in pure JavaScript (node-x11), so an app can run on one machine and display on another, which is the flagship reason the project exists. Cocoa and win32 are the defaults on macOS and Windows.
+
+The screenshot is the tasks example, rendered by the real renderer into node-x11's in-process X server (that is how the docs screenshots are generated, and how the tests run without a display).
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="Cocoa / win32 swap the bottom three layers for a native bridge">
+
+## The layers, and who decides what
+
+<Col gap={12}>
+<Layer name="react">Components, hooks, setState. Knows nothing about output.</Layer>
+<Layer name="react-reconciler">Fibers, lanes, the scheduler, diffing, render and commit phases</Layer>
+<Layer name="HostConfig" tone="orange">~60 callbacks: create, attach, update, remove. The contract.</Layer>
+<Layer name="react-x11 nodes">Retained tree + yoga layout. Decides **how often** drawing happens.</Layer>
+<Layer name="ntk">Windows, 2d canvas over XRender, fonts. Decides **how** drawing is encoded.</Layer>
+<Layer name="node-x11">The X11 wire protocol in pure JavaScript. No policy.</Layer>
+<Layer name="X server" dashed>Local socket, or across the network</Layer>
+</Col>
+
+<Notes>
+
+The split of responsibility matters for the second half of the talk. node-x11 is the protocol and nothing else. ntk gives you windows, a canvas-like 2d context over XRender, glyph caches; it owns how a drawing is encoded on the wire. react-x11 owns how often anything is drawn: which nodes changed, which rectangles are stale, when a frame goes out.
+
+The highlighted layer is the only thing a renderer author writes against react-reconciler: the host config.
+
+On macOS and Windows the bottom three layers become a native bridge (@windowkit/appkit, @windowkit/win32); everything from the node tree up is shared.
+
+</Notes>
+</Slide>

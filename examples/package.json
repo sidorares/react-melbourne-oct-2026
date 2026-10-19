@@ -1,0 +1,21 @@
+{
+  "name": "react-x11-follow-along",
+  "private": true,
+  "type": "module",
+  "description": "The follow-along examples from the talk: hello world, a counter, a to-do list.",
+  "scripts": {
+    "hello": "tsx hello.jsx",
+    "counter": "tsx counter.jsx",
+    "todo": "tsx todo.jsx"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-x11": "^2.47.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

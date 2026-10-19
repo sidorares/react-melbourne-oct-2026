@@ -1,0 +1,172 @@
+/* The deck runtime: stage, presenter, overview, print. Slide styling is in
+   src/components/components.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: #0b0d11;
+}
+
+.deck {
+  position: fixed;
+  inset: 0;
+  touch-action: pan-y;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.stage__canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: center;
+}
+
+.deck__progress {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  background: #e8873a;
+  opacity: 0.7;
+  transition: width 150ms ease-out;
+}
+
+/* overview: `o` */
+.overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  padding: 24px;
+  min-height: 100%;
+  background: #0b0d11;
+}
+.overview__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: #bcc3cd;
+  font: 14px 'IBM Plex Sans', Arial, sans-serif;
+  cursor: pointer;
+}
+.overview__item.is-current {
+  border-color: #e8873a;
+}
+.overview__item .stage[data-overflow] {
+  outline: 4px solid #ff3b30;
+}
+
+/* print: #/print, then the browser's Print → Save as PDF */
+@page {
+  size: 1920px 1080px;
+  margin: 0;
+}
+.print .stage {
+  width: 1920px;
+  height: 1080px;
+  break-after: page;
+}
+@media print {
+  html,
+  body,
+  #root {
+    background: none;
+  }
+}
+
+/* presenter: `p` */
+.presenter {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  padding: 16px;
+  background: #0b0d11;
+  color: #e3e6eb;
+  font: 18px/1.5 'IBM Plex Sans', Arial, sans-serif;
+}
+.presenter__bar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  font-size: 20px;
+}
+.presenter__bar button {
+  margin-left: 8px;
+  padding: 4px 12px;
+  border: 1px solid #3a414d;
+  border-radius: 6px;
+  background: #1e232c;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.presenter__nav {
+  margin-left: auto;
+}
+.presenter__current {
+  min-height: 0;
+}
+.presenter__side {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  min-height: 0;
+}
+.presenter__next {
+  position: relative;
+  aspect-ratio: 16 / 9;
+}
+.presenter__next .stage {
+  opacity: 0.85;
+}
+.presenter__next-label {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(11, 13, 17, 0.8);
+  font-size: 14px;
+  color: #bcc3cd;
+}
+.presenter__notes {
+  overflow: auto;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: #161a21;
+  font-size: 22px;
+  line-height: 1.55;
+}
+.presenter__notes p {
+  margin: 0 0 0.8em;
+}
+.presenter__empty,
+.presenter__end {
+  color: #8a93a0;
+}

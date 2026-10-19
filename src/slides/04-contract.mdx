@@ -1,0 +1,176 @@
+export const section = 'The reconciler contract';
+
+<Slide gap={48} source="src/Reconciler.js">
+
+## A renderer is one function call
+
+<Cols template="1fr 520px" gap={48}>
+<Col>
+
+<Code size={26}>
+
+```js
+import ReactReconciler from 'react-reconciler';
+
+export const Renderer = ReactReconciler(HostConfig);
+
+// createRoot()
+const container = Renderer.createContainer(
+  app,           // containerInfo: the ntk App
+  ConcurrentRoot,  // lanes, transitions, Suspense
+  /* …error handlers */);
+
+// root.render(<App />)
+Renderer.updateContainerSync(tree, container, null, cb);
+Renderer.flushSyncWork();
+```
+
+</Code>
+
+</Col>
+<Col gap={28}>
+
+React core never touches output. It calls **your** callbacks.
+
+The container is whatever you want: here, the X connection.
+
+The initial mount is synchronous, so tests can assert straight after `render()`.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is the whole wiring. react-reconciler is a factory: you hand it an object of callbacks and get back a renderer with createContainer, updateContainer and friends. The containerInfo argument is opaque to React; it is handed back to you in appendChildToContainer and friends. react-x11 passes the ntk App, the X connection.
+
+ConcurrentRoot opts into the modern behaviour: lanes, transitions, time slicing, Suspense.
+
+render() uses updateContainerSync + flushSyncWork, so a mount is applied before the call returns; painting is still asynchronous, a frame later. (react-x11 is written against react-reconciler 0.33, React 19.)
+
+</Notes>
+</Slide>
+
+<Slide source="plus Suspense-commit, transition and DevTools hooks, mostly no-ops here">
+
+## Group the callbacks by when they run
+
+<table>
+<thead>
+<tr><th style={{ width: '20%' }}>Group</th><th style={{ width: '56%' }}>Callbacks</th><th style={{ width: '24%' }}>Phase</th></tr>
+</thead>
+<tbody>
+<tr><td>Mode flags</td><td className="mono">supportsMutation · supportsPersistence · supportsHydration</td><td>static</td></tr>
+<tr><td>Host context</td><td className="mono">getRootHostContext · getChildHostContext</td><td><B>render, top-down</B></td></tr>
+<tr><td>Detached build</td><td className="mono">createInstance · createTextInstance · appendInitialChild · finalizeInitialChildren</td><td><B>render, bottom-up</B></td></tr>
+<tr><td>Commit bracket</td><td className="mono">prepareForCommit · resetAfterCommit</td><td><O>commit: around mutation</O></td></tr>
+<tr><td>Mutations</td><td className="mono">appendChild · insertBefore · removeChild (…ToContainer) · commitUpdate · commitTextUpdate · hide/unhideInstance · detachDeletedInstance</td><td><O>commit: mutation</O></td></tr>
+<tr><td>After attach</td><td className="mono">commitMount · getPublicInstance (refs)</td><td><O>commit: layout</O></td></tr>
+<tr><td>Scheduling</td><td className="mono">scheduleMicrotask · scheduleTimeout · get/setCurrentUpdatePriority · resolveUpdatePriority</td><td>any time</td></tr>
+</tbody>
+</table>
+
+<Notes>
+
+Most tutorials list the host config alphabetically, which hides the one thing that matters: when each callback runs. Blue rows run during render, which can be thrown away. Orange rows run during commit, which happens exactly once per committed tree.
+
+Two details to point out: host context is computed top-down in beginWork, while instances are created bottom-up in completeWork, so context is how a parent passes facts to a child that is built before the parent exists.
+
+And resetAfterCommit runs right after the mutation phase, before layout effects and refs, not at the very end.
+
+</Notes>
+</Slide>
+
+<Slide gap={48}>
+
+## Three ways to own a tree
+
+<Grid cols={3} gap={32}>
+<Card variant="top" tone="orange" label="react-dom · react-x11" title="Mutation">
+
+Instances are long-lived objects you change in place.
+
+<p><Mono>appendChild<br />removeChild<br />commitUpdate</Mono></p>
+
+</Card>
+<Card label="React Native Fabric" title="Persistence">
+
+Instances are immutable. An update clones the changed path and swaps the whole child set.
+
+<p><Mono>cloneInstance<br />createContainerChildSet<br />replaceContainerChildren</Mono></p>
+
+</Card>
+<Card label="react-dom SSR" title="Hydration">
+
+Adopt nodes that already exist instead of creating them.
+
+<p><Mono>canHydrateInstance<br />hydrateInstance<br />getNextHydratableSibling</Mono></p>
+
+</Card>
+</Grid>
+
+react-x11 is mutation-only: a window, a yoga node and a glyph cache are expensive, stateful objects you do not clone per update.
+
+<Notes>
+
+The three supports* flags choose which family of callbacks React will call. Mutation is the DOM model: one object per element for its whole life, mutated in place.
+
+Persistence is what React Native's Fabric uses: the host tree is immutable and shared across threads, so an update clones the changed path and replaces the container's children in one go.
+
+Hydration is orthogonal: on first render, walk nodes that already exist (server-rendered HTML) and attach to them. react-x11 sets supportsMutation true and the other two false.
+
+</Notes>
+</Slide>
+
+<Slide gap={48} source="src/Reconciler.js:466">
+
+## React 19 moved the diff into the commit
+
+<Cols template="1fr 1fr" gap={32}>
+<Col gap={16}>
+
+<Eyebrow>React 18 and older tutorials</Eyebrow>
+
+```js
+// render phase
+prepareUpdate(inst, type, oldP, newP) {
+  return diff(oldP, newP);
+},
+// commit phase
+commitUpdate(inst, payload, type,
+             oldP, newP) {
+  apply(inst, payload);
+}
+```
+
+</Col>
+<Col gap={16}>
+
+<Eyebrow tone="orange">React 19 · react-x11</Eyebrow>
+
+```js
+// render phase: nothing.
+// The fiber is flagged when
+// oldProps !== newProps
+
+// commit phase
+commitUpdate(instance, type,
+             oldProps, newProps) {
+  instance.applyProps(newProps, oldProps);
+}
+```
+
+</Col>
+</Cols>
+
+Props are compared by **identity**, so every re-render calls commitUpdate. Deciding whether anything really changed is your job.
+
+<Notes>
+
+If you learned custom renderers from a 2019 blog post, this is the change that will confuse you. React used to call prepareUpdate during render; you returned an update payload (often a list of changed props) and React handed it back to commitUpdate.
+
+React 19 removed prepareUpdate. During render React now only checks whether the props object is a different object, which after any re-render of the parent it always is, and flags the fiber. So commitUpdate is called for every host element whose parent re-rendered, and the renderer has to find out whether anything it draws actually changed.
+
+react-x11 does that in applyProps: style objects are compared by value, and a node that draws nothing new claims no damage and schedules no frame.
+
+</Notes>
+</Slide>

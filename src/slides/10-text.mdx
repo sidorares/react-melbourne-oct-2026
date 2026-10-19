@@ -1,0 +1,377 @@
+export const section = 'Text';
+
+<Slide gap={36} source={'src/nodes/text.js · docs/macos.md "Text: the engine contract" · docs/windows.md "Text"'}>
+
+## Text: four engines, one layout
+
+| Backend     | Finds fonts            | Shapes, bidi, breaks                  | Rasterizes                      | Caches                                   |
+| ----------- | ---------------------- | ------------------------------------- | ------------------------------- | ---------------------------------------- |
+| **X11**     | fc-match, or your files | ntk: fontkit, bidi-js, UAX #14, all JS | ntk, A8, no hinting             | glyph sets on the server, shared by apps |
+| **Wayland** | fc-match               | ntk, same as X11                      | ntk, A8                         | a GLES atlas per device                  |
+| **Cocoa**   | CoreText               | CoreText                              | CoreGraphics, grayscale AA      | CoreGraphics                             |
+| **win32**   | DirectWrite            | DirectWrite                           | Direct2D, ClearType when opaque | DirectWrite                              |
+
+<Grid cols={2} gap={32}>
+<Card variant="rule" tone="blue" title="One question for layout">
+
+yoga asks a {'<text>'} `measureContent(width)`, memoized per width, rounded up to whole pixels. Every backend answers it.
+
+</Card>
+<Card variant="rule" tone="orange" title="Pixels differ, layout must not">
+
+Cocoa answers "narrowest width" with the same UAX #14 package as ntk, so a column wraps at the same words everywhere.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Text is where the backends differ most, so it is worth a map. On X11 and Wayland everything is ntk, in JavaScript: fontconfig's fc-match finds the face, a vendored fontkit shapes it, bidi-js orders it, the linebreak package breaks it, and ntk's own rasterizer draws coverage masks with no hinting. X11 keeps those masks on the server as glyph sets; Wayland packs them into a GL texture atlas.
+
+On macOS CoreText does finding, shaping, bidi and wrapping, and CoreGraphics rasterizes with grayscale antialiasing. On Windows DirectWrite and Direct2D do the same jobs, with ClearType where the target is opaque.
+
+The renderer's job is to keep layout identical across that. Yoga only ever asks a text node one thing, how big are you at this width, memoized per width and rounded up to whole pixels so a fractional answer cannot ripple through flexbox.
+
+And one subtle place where engines disagree, the min-content width, which is the width of the longest unbreakable word, Cocoa answers with the same UAX #14 line-breaking package ntk uses, rather than CoreText's breaker. Pixel-level output still differs per backend, and the tests know it.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="ntk docs/fonts.md · ntk#504 (WOFF2), #227, #333 (opsz), #434 (CBDT) · react-x11#347 (loadFont)">
+
+## Formats, axes, features, colour
+
+<Grid cols={2} gap={20}>
+<Card dense title="Formats">
+
+TTF, OTF, TTC, WOFF and WOFF2 wherever ntk draws. WOFF2 through the runtime's own Brotli: 21.4 → 3.9 ms. Gaps: Cocoa's loadFont refuses WOFF2 (#805); win32 wants the bare sfnt.
+
+</Card>
+<Card dense title="Variable fonts">
+
+`fontWeight` drives **wght**, fontVariationSettings the rest. **opsz** follows the size: a 13 px SF label gets the Text cut. Cocoa doesn't move wght yet (#806).
+
+</Card>
+<Card dense title="Features">
+
+`fontVariantNumeric: 'tabular-nums'`, fontFeatureSettings like ['tnum', 'zero'], and letterSpacing, which drops optional ligatures. #604
+
+</Card>
+<Card dense title="Colour and emoji">
+
+COLR and sbix faces draw; a bitmap-only CBDT face is passed by for the next. X11 glyph sets are A8 coverage: one ink colour. CoreText cascades emoji in colour.
+
+</Card>
+</Grid>
+
+<Card dense variant="inverse" title="Finding a font is environment, not code">
+
+fc-match follows PATH: on macOS, Homebrew's fontconfig maps sans-serif to Hiragino (#86). A first fallback lookup costs ~110 ms. Ship your faces with <B>loadFont</B> and @fontsource from npm, and every machine draws the same text.
+
+</Card>
+
+<Notes>
+
+What a UI developer can count on. Formats: ntk reads every container a web developer ships, TTF, OTF, collections, WOFF and WOFF2, and decompressing WOFF2 with the runtime's native Brotli made it five times faster. The native backends are behind in places, and those gaps are filed.
+
+Variable fonts are first class on ntk: fontWeight is the weight axis, fontVariationSettings reaches any other axis, and the optical size axis follows the font size automatically, the way browsers do, so small labels in SF get the cut designed for small text. OpenType features are there for UI work: tabular figures for columns of numbers that must not jiggle, slashed zero, stylistic sets, and letter spacing, which turns off optional ligatures as CSS does.
+
+Colour is where X11 is honest about its limits: its glyph sets are alpha masks, so text has one ink colour; a colour bitmap emoji font is skipped for the next face that has the character; CoreText draws emoji in colour.
+
+And the practical advice: system font lookup is an environment fact, slow on first use and different per machine, so an app that cares about its typography ships its faces from npm.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="fontkit shapers: Arabic, Indic, Hangul, USE · samples drawn here by your browser, not by ntk">
+
+## Shaping: characters in, positioned glyphs out
+
+<table className="big">
+<thead>
+<tr><th style={{ width: '22%' }}>Characters</th><th style={{ width: '14%' }}>Drawn</th><th>What the shaper did</th></tr>
+</thead>
+<tbody>
+<tr><td style={{ fontSize: 36 }}>f + i</td><td style={{ fontSize: 36 }}>ﬁ</td><td>one glyph for two characters: a ligature (GSUB)</td></tr>
+<tr><td style={{ fontSize: 36 }}>T + y</td><td style={{ fontSize: 36 }}>Ty</td><td>pair kerning (GPOS): T's advance 19.55 → 17.78 px in Arial 32</td></tr>
+<tr><td style={{ fontSize: 36 }}>س + ل + ا + م</td><td style={{ fontSize: 36 }}>سلام</td><td>Arabic: each letter takes its initial, medial or final form, right to left</td></tr>
+<tr><td style={{ fontSize: 36 }}>क + ि</td><td style={{ fontSize: 36 }}>कि</td><td>Devanagari: the vowel sign typed after the consonant is drawn before it</td></tr>
+<tr><td style={{ fontSize: 36 }}>e + ◌́</td><td style={{ fontSize: 36 }}>é</td><td>a combining mark anchored onto its base (GPOS mark-to-base)</td></tr>
+</tbody>
+</table>
+
+<Grid cols={2} gap={32}>
+<Card variant="rule" tone="blue" title="Why a UI cares">
+
+Glyphs ≠ characters. Width, caret stops and selection must come from shaped clusters, never from string length.
+
+</Card>
+<Card variant="rule" tone="orange" title="Known gaps">
+
+No dictionary breaking for Thai, Lao, Khmer: runs cut at graphemes. No IME on X11 yet (#272).
+
+</Card>
+</Grid>
+
+<Notes>
+
+Shaping is the step people forget exists until it breaks. The input is a sequence of Unicode characters, the output a sequence of glyph ids with advances and offsets, and the two are not one to one. A ligature turns two characters into one glyph. Kerning keeps the glyphs but moves them: in Arial at 32 px the T in front of a y advances 17.78 px instead of 19.55. Arabic letters change shape depending on whether they join on either side, and the run is laid out right to left. Devanagari reorders: the short i vowel sign is stored after the consonant but drawn in front of it. Combining marks are positioned onto their base by anchors in the font.
+
+ntk gets all of this from fontkit's script shapers, Arabic, Indic, Hangul and the Universal Shaping Engine, and checked its faster mark lookups against fontkit's own output over 2,113 faces.
+
+For a UI toolkit the consequence is that anything counting characters is wrong: caret positions, hit testing, selection and measurement all have to come from shaped clusters.
+
+The honest gaps: line breaking for scripts without spaces, Thai, Lao, Khmer, needs a dictionary ntk does not have, and there is no input method support on X11 yet. Note the samples on this slide are rendered by the presentation, not by ntk.
+
+</Notes>
+</Slide>
+
+<Slide gap={28} source="bidi-js in ntk lib/text/shape.js · react-x11#275 (rtl), #341/#342 (fields) · Latin-only text skips bidi (ntk#379)">
+
+## Bidi: one line, two directions
+
+<BidiRows />
+
+<Small>UAX #9 gives each character a level: even runs go left to right, odd runs right to left. Each run is shaped on its own, then reordered.</Small>
+
+<Grid cols={3} gap={20}>
+<Card variant="rule" tone="blue" title="direction: 'rtl'">
+
+mirrors layout through logical props: paddingStart, marginEnd, start / end
+
+</Card>
+<Card variant="rule" tone="blue" title="Base level from the box">
+
+not the first strong character; no dir="auto" yet
+
+</Card>
+<Card variant="rule" tone="blue" title="Caret keys are logical">
+
+← moves toward the start, also in an RTL field
+
+</Card>
+<Card variant="rule" tone="orange" title="Selection splits">
+
+a logical range across runs is several rects on screen
+
+</Card>
+<Card variant="rule" tone="orange" title="Ellipsis goes last visually">
+
+an RTL line is cut on its left
+
+</Card>
+<Card variant="rule" tone="orange" title="Empty is a paragraph too">
+
+an empty RTL field's caret sat on the left (ntk#533)
+
+</Card>
+</Grid>
+
+<Notes>
+
+Bidirectional text is the other thing a UI toolkit cannot treat as a string. In memory, characters are stored in the order they are typed: Hello, then the Hebrew word shalom starting with shin, then 42. The Unicode bidirectional algorithm, UAX #9, gives every character an embedding level, and runs at odd levels are displayed right to left, so on screen the Hebrew letters appear reversed while the digits and the Latin stay left to right.
+
+ntk runs bidi-js before shaping, shapes each direction run on its own, then reorders the runs for display, and skips the whole thing for text with no right-to-left characters.
+
+For UI the consequences are everywhere. direction rtl on a box mirrors the layout through logical properties. A text's base direction comes from its box rather than guessing from the first strong character; there is no dir auto yet. Arrow keys move the caret logically, toward the start of the text, which is what most native toolkits do; visual caret movement is an open question. A selection that is one range in memory can be several rectangles on screen. Truncation puts the ellipsis at the visual end, the left of an RTL line.
+
+And the bug that shows how deep this goes: bidi-js returns no paragraph for an empty string, so an empty right-to-left field drew its caret on the wrong side until ntk 8.23.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="ntk lib/text/{fontmanager,shape,font,layout,glyphs}.js · Arial 32px, shaped by ntk on this machine">
+
+## Text on X11: from a string to one request
+
+<Grid cols={8} gap={12}>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**1 Match**
+
+fc-match, or a font you loaded
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**2 Bidi**
+
+UAX #9 levels, direction runs
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**3 Itemize**
+
+fallback face per missing char
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**4 Shape**
+
+fontkit: GSUB, GPOS, kerning
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**5 Layout**
+
+UAX #14 breaks, memo per word
+
+</Card>
+<Card variant="top" tone="orange" style={{ padding: 20 }}>
+
+**6 Rasterize**
+
+new glyphs only, once per size
+
+</Card>
+<Card variant="inverse-top">
+
+**7 AddGlyphs**
+
+upload, once
+
+</Card>
+<Card variant="inverse-top">
+
+**8 Composite**
+
+one request per draw
+
+</Card>
+</Grid>
+
+<Cols template="1fr 560px" gap={40}>
+<Col gap={12}>
+
+<Eyebrow>What shaping hands the drawing layer</Eyebrow>
+
+```js
+run = { font, size: 32, glyphs: [
+  { id: 55, ax: 17.78 }, // T, kerned with y
+  { id: 92, ax: 16 },    // y
+  { id: 83, ax: 17.8 },  // p
+  { id: 72, ax: 17.8 },  // e   (dx, dy: rare, marks)
+]}
+```
+
+</Col>
+<Col gap={20}>
+
+Steps 1–6 are JavaScript in our process. The server only stores bitmaps and blends them.
+
+A glyph is an **id** and an **advance**. The advance differs from the font's default only at a kern, a mark or rounding drift.
+
+</Col>
+</Cols>
+
+<Notes>
+
+The whole text pipeline on X11 lives in ntk and is pure JavaScript. Matching asks fontconfig's fc-match, or takes a face the app loaded. bidi-js computes the Unicode bidirectional levels and splits the string into direction runs. Each run is split again wherever the primary face lacks a character, using fontconfig's coverage data to pick a fallback.
+
+fontkit, vendored into ntk, shapes each piece: GSUB substitutions such as ligatures and Arabic joining forms, and GPOS positioning such as kerning and mark attachment. Layout breaks lines with UAX #14 and memoizes shaping per word, so a resize re-wraps without reshaping.
+
+Only then does anything reach the server: glyphs it has not seen at this size are rasterized and uploaded once, and every draw after that is a single CompositeGlyphs request.
+
+The output of shaping, shown here for the word Type in Arial at 32 px, is just glyph ids and advances. Notice T's advance: 17.78 instead of its default 19.55, because the font kerns T against y. Offsets dx and dy exist for marks and are rare in UI text.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="captured from ntk 8.23.2 + node-x11's in-process server · ntk docs/text.md, docs/shared-glyphs.md">
+
+## Upload once, keep it on the server
+
+<Cols template="1fr 600px" gap={48}>
+<Col gap={16}>
+
+One **GlyphSet** per (face, size). `AddGlyphs` for "Type": ids we choose, 0–3, and a GLYPHINFO each:
+
+| glyph  | local id |   w × h |     x, y | xOff: stored advance |
+| ------ | -------: | ------: | -------: | -------------------: |
+| T (55) |        0 | 20 × 23 |    0, 23 |       **<O>20</O>** |
+| y (92) |        1 | 16 × 24 |    0, 17 |       **<O>16</O>** |
+| p (83) |        2 | 16 × 24 |   −2, 17 |       **<O>18</O>** |
+| e (72) |        3 | 16 × 18 |   −1, 17 |       **<O>18</O>** |
+
+Plus the a8 coverage bitmaps: **1,592 bytes**, sent once. The server now moves its own pen by xOff.
+
+</Col>
+<Col gap={18}>
+
+**Ids are ours.** Compact per set, so one byte per glyph until a size has used 256 glyphs.
+
+**Rasterizer:** signed-area accumulation from fontkit outlines, analytic antialiasing. ~25 µs for a 20 px icon.
+
+**Bounded:** 8 MB LRU of uploaded bitmaps; a cold (face, size) is freed with FreeGlyphSet.
+
+**Shared:** ntk apps on one display share glyph sets (\_NTK\_GLYPHD). Each later app skips ~8 ms and ~11.5 KB per face and size.
+
+**Huge sizes** (over 256 px) go as trapezoids: bitmaps grow with size², outlines with √size.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This table is the real AddGlyphs request ntk sent for the word Type, captured off the socket. XRender lets the client choose glyph ids, so ntk numbers glyphs 0, 1, 2, 3 per glyph set rather than using the font's own ids (55, 92, 83, 72). That keeps every id under 256 for a typical UI size, which means the 8-bit variant of CompositeGlyphs, one byte per glyph on every draw.
+
+Each GLYPHINFO says how big the bitmap is, where it sits relative to the glyph origin, and xOff: how far the server should move its pen after drawing it. ntk stores the rounded default advance there, so for ordinary text the server walks the pen itself and the client sends nothing per glyph but the id.
+
+Bitmaps come from ntk's own rasterizer over fontkit's outlines, signed-area accumulation as in font-rs and stb_truetype, which gives exact antialiasing with no supersampling. The cache is bounded at 8 MB per connection, and since ntk 8 the glyph sets can be shared between processes on the same display through a small directory protocol, so the second app showing the same UI font rasterizes and uploads nothing.
+
+Very large text, over 256 px, is sent as trapezoids instead, because a cached bitmap costs size squared while an outline costs roughly the square root of the size.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="bytes as captured on the socket; the second draw of the same word sends this request and nothing else">
+
+## 52 bytes draw a kerned word
+
+<Cols template="760px 1fr" gap={40}>
+<Col gap={14}>
+
+<Shot src="img/type-glyphs.png" alt="The word Type in Arial 32px as composited by the X server, magnified with a pixel grid. A blue baseline; solid orange lines at x 20, 38, 54 and 72 where each glyph's origin lands; a dashed line at x 40 where the y would start without kerning" width={760} height={400} />
+
+<Small><O>│</O> each glyph's origin: 20, 38, 54, 72 · <O>┆</O> 40: where T's stored advance would put y · <B>─</B> baseline</Small>
+
+</Col>
+<Col>
+
+<table className="mono-first">
+<thead>
+<tr><th style={{ width: '44%' }}>bytes</th><th>meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>82 17 0d00</td><td>Render · CompositeGlyphs8 · 13 words</td></tr>
+<tr><td>03 000000</td><td>op Over</td></tr>
+<tr><td>08002000 06002000</td><td>src: solid ink · dst: the window</td></tr>
+<tr><td>00000000 09002000</td><td>no mask format · glyphset Arial 32</td></tr>
+<tr><td>1400 6400</td><td>source origin 20, 100</td></tr>
+<tr className="hl-blue"><td>01 000000 1400 6400</td><td>elt: 1 glyph, pen to 20, 100</td></tr>
+<tr className="hl-blue"><td>00 ······</td><td>T</td></tr>
+<tr className="hl-orange"><td>03 000000 <b>feff</b> 0000</td><td>elt: 3 glyphs, pen <b>−2</b>: the kern</td></tr>
+<tr className="hl-orange"><td>01 02 03 ··</td><td>y p e, the server walks the pen</td></tr>
+</tbody>
+</table>
+
+</Col>
+</Cols>
+
+Unkerned text is one elt: 8 bytes, then **1 byte per glyph**. Each kern, mark or drift opens a new elt. A 60-character line costs ~70 bytes.
+
+<Notes>
+
+This is the punchline of the text section, and every byte on it is real: captured from the socket while ntk drew the word Type in Arial at 32 px, and the picture is the server's own output, read back and magnified.
+
+The request header says Render, CompositeGlyphs8, 13 four-byte words. Then the compositing operator, the source picture (a solid black), the destination (the window), no intermediate mask, the glyph set holding Arial at 32 px, and the source origin. Then the glyph list, made of elements. Each element is an 8-byte header (a count, padding, and a pen offset dx, dy) followed by one byte per glyph id, padded to four bytes.
+
+The first element moves the pen to 20, 100 and draws local glyph 0, T. The server then advances the pen by T's stored xOff, 20, to x 40. But the shaped position of y is 17.78 after T, which rounds to 38, because Arial kerns T and y. So the encoder starts a second element with dx minus two, the feff, and lists y, p and e; the server advances by their stored 16 and 18 by itself.
+
+Without the kern this would be a single element and 40 bytes. A typical 60-character line is around 70 bytes after warm-up, and redrawing it never uploads anything again.
+
+</Notes>
+</Slide>

@@ -1,0 +1,199 @@
+export const section = 'Priorities';
+
+<Slide source={'"in one go" = workLoopSync; time-sliced = workLoopConcurrent, checking shouldYield() between fibers'}>
+
+## Every setState gets a lane
+
+<table className="mono-first big">
+  <thead>
+    <tr><th style={{ width: '30%' }}>Lane</th><th style={{ width: '38%' }}>Where it comes from</th><th style={{ width: '32%' }}>How it renders</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>SyncLane</td><td>click, key press, focus, flushSync</td><td><O>in one go, right away</O></td></tr>
+    <tr><td>InputContinuous</td><td>mouse move, wheel, drag</td><td><O>in one go</O></td></tr>
+    <tr><td>DefaultLane</td><td>timers, sockets, promises</td><td><O>in one go</O></td></tr>
+    <tr><td>TransitionLanes</td><td>startTransition, useDeferredValue</td><td><B>time-sliced, interruptible</B></td></tr>
+    <tr><td>RetryLanes</td><td>Suspense retries</td><td><B>time-sliced</B></td></tr>
+    <tr><td>Idle · Offscreen</td><td>idle work, hidden {'<Activity>'}</td><td><B>time-sliced, last</B></td></tr>
+  </tbody>
+</table>
+
+Lanes are bits, so pending work is one bitmask. A lane left waiting too long **expires** and renders synchronously.
+
+<Notes>
+
+A lane is a bit in a 31-bit mask; React batches updates by lane and always works on the highest-priority lanes pending. Two render loops exist. workLoopSync processes fibers until done. workLoopConcurrent checks shouldYield between fibers, and the scheduler says yield every 5 ms or so, so a big transition render never blocks input for long.
+
+In the installed react-reconciler, sync, continuous and default lanes use the sync loop; only transitions, retries, idle and offscreen work are time-sliced.
+
+Expiration is the starvation guard: a lane that has been pending past its timeout is added to root.expiredLanes and rendered synchronously, so a constant stream of urgent updates cannot postpone a transition forever.
+
+</Notes>
+</Slide>
+
+<Slide source="src/priority.js:24, src/events.js">
+
+## The host tells React how urgent an update is
+
+<Cols template="1fr 520px" gap={40}>
+<Col gap={24}>
+
+```js
+// src/priority.js, wired into the HostConfig
+let current = NoEventPriority;
+resolveUpdatePriority() {
+  return current !== NoEventPriority
+    ? current : DefaultEventPriority;
+}
+runWithPriority(p, fn) {
+  const prev = current; current = p;
+  try { return fn(); } finally { current = prev; }
+}
+```
+
+```js
+// src/events.js
+_onMouseDown(native) { runWithPriority(Discrete, …) }
+_onMouseMove(native) { runWithPriority(Continuous, …) }
+```
+
+</Col>
+<Col gap={28}>
+
+react-dom reads **window.event.type**. There is no window.event here, so the dispatcher says it.
+
+Press, release, key, focus: **Discrete**. Move, wheel, hover: **Continuous**.
+
+A window-manager close or another app's message is a user action too: Discrete.
+
+</Col>
+</Cols>
+
+<Notes>
+
+React asks the host for the priority of an update at the moment setState is called, through resolveUpdatePriority. React DOM answers by looking at the global window.event. A renderer without a global event needs its own ambient variable, which is all priority.js is: a module-level current priority, set around each dispatch and restored after.
+
+The event manager wraps presses, releases, keys and focus changes as discrete, and moves, wheel and hover changes as continuous. A setState from a timer, a network callback or a promise finds no priority set and gets the default lane.
+
+The same discrete wrapping is used for things that are user actions arriving by another route: the window manager asking to close the window, or another X client sending a ClientMessage.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="scheduler yields between fibers; a pending higher lane makes the next work loop start fresh">
+
+## A click arrives mid-transition
+
+<InterruptTimeline />
+
+<Grid cols={3} gap={32}>
+<Card title="What was lost">
+
+Component renders, and every createInstance from the abandoned attempt.
+
+</Card>
+<Card title="What the host saw">
+
+Nothing, if createInstance only built objects. Orphaned windows, if it called CreateWindow.
+
+</Card>
+<Card title="Why it's safe">
+
+Updates are queued on fibers, not consumed. A restart replays them.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Walk the timeline left to right. A startTransition update is rendering in time slices: each slice processes fibers until shouldYield says the 5 ms are up, then returns to the event loop. The X event for a click is handled in that gap. Its handler runs at discrete priority and its setState lands on SyncLane.
+
+When React next picks work, the highest-priority lane is no longer the one the work-in-progress tree was built for, so prepareFreshStack throws the half-built tree away and starts over from current, rendering only the click's update, and commits it. Then the transition starts again from scratch.
+
+Nothing was lost semantically: updates live in queues on fibers and are only removed when a commit consumes them, so the restart replays both the transition's update and the click's. What was lost is work, including every host instance created during the abandoned attempt. If those were real windows, they are now orphans on the server.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="react-x11 maps hideInstance to node.setHidden(true)">
+
+## Six ways a render never commits
+
+<Grid cols={3} gap={24}>
+<Card title="Interrupted">
+
+An urgent update lands mid-transition. The transition restarts after it commits.
+
+</Card>
+<Card title="Superseded">
+
+A newer transition or deferred value arrives before the first one commits.
+
+</Card>
+<Card title="Suspended">
+
+use(promise) or lazy suspends. In a transition, the old UI stays and the render is dropped.
+
+</Card>
+<Card title="Threw">
+
+React retries once, then renders the nearest error boundary instead.
+
+</Card>
+<Card title="StrictMode">
+
+In development, components render twice and effects mount, unmount, mount.
+
+</Card>
+<Card title="Pre-rendered">
+
+Hidden {'<Activity>'} and suspended siblings render work that may never be shown.
+
+</Card>
+</Grid>
+
+Content already on screen that suspends again is **hidden**, not destroyed: hideInstance / unhideInstance keep its state.
+
+<Notes>
+
+Six situations where the render phase runs and its result is never committed, or committed differently. Interrupted and superseded are the scheduling cases from the previous slide. Suspension: a component that reads a pending promise suspends; inside a transition React keeps showing the previous UI and abandons the render until the promise settles; outside one it commits the nearest Suspense fallback.
+
+Errors: React retries the render once synchronously in case the error was a race, then renders the error boundary; the first attempts are discarded. StrictMode in development renders components twice on purpose to flush out impure renders. Pre-rendering: React 19 can render hidden Activity trees and siblings of a suspended component ahead of time at low priority.
+
+The one case where existing host instances survive is the last line: if content already committed suspends again outside a transition, React hides it with hideInstance and shows the fallback, then unhides it, keeping component state. react-x11 implements that as setHidden.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement">
+
+# If the garbage collector can't undo it, it doesn't belong in render.
+
+<Grid cols={3} gap={48}>
+<Card variant="line" tone="blue" title="Render">
+
+Allocate objects, validate, compute layout inputs
+
+</Card>
+<Card variant="line" tone="orange" title="Commit">
+
+Talk to the server: create, map, reparent, destroy
+
+</Card>
+<Card variant="line" title="Effects">
+
+Talk to everything else: D-Bus, menus, tray, timers
+
+</Card>
+</Grid>
+
+<Notes>
+
+The one-line rule I wish I had started with. If your host instances are plain objects, the render phase can be as wasteful as React likes.
+
+The moment an instance owns something outside the JS heap (a window, a socket conversation, a native view, a file), its creation belongs to the commit, and its destruction to removeChild or detachDeletedInstance.
+
+Anything that is not part of the tree at all belongs in an effect with a cleanup, which is the next part of the talk.
+
+</Notes>
+</Slide>

@@ -1,0 +1,55 @@
+// Everything an .mdx slide file can use without importing it.
+import { Slide, Notes } from './Slide.jsx';
+import { Step } from './Step.jsx';
+import {
+  Cols,
+  Col,
+  Grid,
+  Card,
+  Stat,
+  Eyebrow,
+  Lead,
+  Small,
+  O,
+  B,
+  Mono,
+  Code,
+  Shot,
+  Numbered,
+  Layer,
+  Spacer,
+} from './blocks.jsx';
+import {
+  InterruptTimeline,
+  DamageRects,
+  ScrollBlit,
+  BidiRows,
+  QualityLadder,
+} from './diagrams.jsx';
+
+export const components = {
+  Slide,
+  Notes,
+  Step,
+  Cols,
+  Col,
+  Grid,
+  Card,
+  Stat,
+  Eyebrow,
+  Lead,
+  Small,
+  O,
+  B,
+  Mono,
+  Code,
+  Shot,
+  Numbered,
+  Layer,
+  Spacer,
+  InterruptTimeline,
+  DamageRects,
+  ScrollBlit,
+  BidiRows,
+  QualityLadder,
+};
