@@ -1,0 +1,1705 @@
+export const section = "Backup";
+
+<Slide theme="dark" layout="statement">
+
+# Backup slides
+
+<Lead>The renderer deep dive: for questions</Lead>
+
+<Notes>
+
+Not part of the talk. The rest of the earlier deck, in its original order, for Q&A.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" bar>
+
+<p className="mono b" style={{ fontSize: 30 }}>{'<window> <box> <text>'}</p>
+
+# React without the DOM
+
+<Lead>How react-x11 turns a reconciler, a layout engine and the X11 protocol into desktop apps</Lead>
+
+<Spacer />
+
+<p style={{ color: 'var(--fg-muted)' }}>Andrey Sidorov · React Melbourne · October 2026</p>
+
+<Notes>
+
+Opening. This talk is about what a custom React renderer actually does, using react-x11 as the worked example. react-x11 renders React to native desktop windows: X11 on Linux (and over the network), Cocoa on macOS, win32 and Wayland.
+
+Live demos happen here, before any more slides.
+
+Then two halves: first the React side (the reconciler contract, render vs commit, priorities), then the renderer side (which elements become native windows, which are painted, and how we decide what to repaint).
+
+</Notes>
+</Slide>
+
+<Slide source="plus Suspense-commit, transition and DevTools hooks, mostly no-ops here">
+
+## Group the callbacks by when they run
+
+<table>
+<thead>
+<tr><th style={{ width: '20%' }}>Group</th><th style={{ width: '56%' }}>Callbacks</th><th style={{ width: '24%' }}>Phase</th></tr>
+</thead>
+<tbody>
+<tr><td>Mode flags</td><td className="mono">supportsMutation · supportsPersistence · supportsHydration</td><td>static</td></tr>
+<tr><td>Host context</td><td className="mono">getRootHostContext · getChildHostContext</td><td><B>render, top-down</B></td></tr>
+<tr><td>Detached build</td><td className="mono">createInstance · createTextInstance · appendInitialChild · finalizeInitialChildren</td><td><B>render, bottom-up</B></td></tr>
+<tr><td>Commit bracket</td><td className="mono">prepareForCommit · resetAfterCommit</td><td><O>commit: around mutation</O></td></tr>
+<tr><td>Mutations</td><td className="mono">appendChild · insertBefore · removeChild (…ToContainer) · commitUpdate · commitTextUpdate · hide/unhideInstance · detachDeletedInstance</td><td><O>commit: mutation</O></td></tr>
+<tr><td>After attach</td><td className="mono">commitMount · getPublicInstance (refs)</td><td><O>commit: layout</O></td></tr>
+<tr><td>Scheduling</td><td className="mono">scheduleMicrotask · scheduleTimeout · get/setCurrentUpdatePriority · resolveUpdatePriority</td><td>any time</td></tr>
+</tbody>
+</table>
+
+<Notes>
+
+Most tutorials list the host config alphabetically, which hides the one thing that matters: when each callback runs. Blue rows run during render, which can be thrown away. Orange rows run during commit, which happens exactly once per committed tree.
+
+Two details to point out: host context is computed top-down in beginWork, while instances are created bottom-up in completeWork, so context is how a parent passes facts to a child that is built before the parent exists.
+
+And resetAfterCommit runs right after the mutation phase, before layout effects and refs, not at the very end.
+
+</Notes>
+</Slide>
+
+<Slide gap={48}>
+
+## Three ways to own a tree
+
+<Grid cols={3} gap={32}>
+<Card variant="top" tone="orange" label="react-dom · react-x11" title="Mutation">
+
+Instances are long-lived objects you change in place.
+
+<p><Mono>appendChild<br />removeChild<br />commitUpdate</Mono></p>
+
+</Card>
+<Card label="React Native Fabric" title="Persistence">
+
+Instances are immutable. An update clones the changed path and swaps the whole child set.
+
+<p><Mono>cloneInstance<br />createContainerChildSet<br />replaceContainerChildren</Mono></p>
+
+</Card>
+<Card label="react-dom SSR" title="Hydration">
+
+Adopt nodes that already exist instead of creating them.
+
+<p><Mono>canHydrateInstance<br />hydrateInstance<br />getNextHydratableSibling</Mono></p>
+
+</Card>
+</Grid>
+
+react-x11 is mutation-only: a window, a yoga node and a glyph cache are expensive, stateful objects you do not clone per update.
+
+<Notes>
+
+The three supports* flags choose which family of callbacks React will call. Mutation is the DOM model: one object per element for its whole life, mutated in place.
+
+Persistence is what React Native's Fabric uses: the host tree is immutable and shared across threads, so an update clones the changed path and replaces the container's children in one go.
+
+Hydration is orthogonal: on first render, walk nodes that already exist (server-rendered HTML) and attach to them. react-x11 sets supportsMutation true and the other two false.
+
+</Notes>
+</Slide>
+
+<Slide gap={48} source="src/Reconciler.js:466">
+
+## React 19 moved the diff into the commit
+
+<Cols template="1fr 1fr" gap={32}>
+<Col gap={16}>
+
+<Eyebrow>React 18 and older tutorials</Eyebrow>
+
+```js
+// render phase
+prepareUpdate(inst, type, oldP, newP) {
+  return diff(oldP, newP);
+},
+// commit phase
+commitUpdate(inst, payload, type,
+             oldP, newP) {
+  apply(inst, payload);
+}
+```
+
+</Col>
+<Col gap={16}>
+
+<Eyebrow tone="orange">React 19 · react-x11</Eyebrow>
+
+```js
+// render phase: nothing.
+// The fiber is flagged when
+// oldProps !== newProps
+
+// commit phase
+commitUpdate(instance, type,
+             oldProps, newProps) {
+  instance.applyProps(newProps, oldProps);
+}
+```
+
+</Col>
+</Cols>
+
+Props are compared by **identity**, so every re-render calls commitUpdate. Deciding whether anything really changed is your job.
+
+<Notes>
+
+If you learned custom renderers from a 2019 blog post, this is the change that will confuse you. React used to call prepareUpdate during render; you returned an update payload (often a list of changed props) and React handed it back to commitUpdate.
+
+React 19 removed prepareUpdate. During render React now only checks whether the props object is a different object, which after any re-render of the parent it always is, and flags the fiber. So commitUpdate is called for every host element whose parent re-rendered, and the renderer has to find out whether anything it draws actually changed.
+
+react-x11 does that in applyProps: style objects are compared by value, and a node that draws nothing new claims no damage and schedules no frame.
+
+</Notes>
+</Slide>
+
+<Slide gap={48} source="the 5 ms is the scheduler's frameInterval">
+
+## Render builds a tree nobody sees yet
+
+<Cols template="1fr 600px" gap={40}>
+<Grid cols={2} gap={24}>
+<Card tone="blue" title="Pure">
+
+Calls your components and diffs. It may finish with nothing visible at all.
+
+</Card>
+<Card tone="blue" title="Interruptible">
+
+A transition render yields to the event loop every ~5 ms.
+
+</Card>
+<Card tone="blue" title="Discardable">
+
+Urgent input, a suspension or an error drops the whole work in progress.
+
+</Card>
+<Card tone="blue" title="Repeatable">
+
+One component can render many times per commit. StrictMode does it on purpose.
+
+</Card>
+</Grid>
+<Card variant="inverse" title="Two fiber trees">
+
+<B>current</B>: what is on screen.
+
+<B>workInProgress</B>: its alternate, being built. New host instances hang off it as **fiber.stateNode**.
+
+Commit is a pointer swap: <O>root.current = finishedWork</O>.
+
+Discarding is dropping references. Fine for a DOM node. Not for a server-side window.
+
+</Card>
+</Cols>
+
+<Notes>
+
+Fiber is double-buffered, like a graphics pipeline. current is the tree that matches the screen; every fiber has an alternate, and the render phase builds the next state into those alternates. Host instances created for new elements are stored on the work-in-progress fibers as stateNode.
+
+If React abandons the render, it simply resets the work-in-progress stack (prepareFreshStack) and those objects become unreachable. For react-dom that is fine: a detached DOM node is garbage collected.
+
+For anything that holds a resource outside the JS heap (an X window, a file handle, a native view) unreachable is not the same as released: nobody calls you back to free it.
+
+Only transition, retry and idle lanes are time-sliced; sync, continuous and default lanes render in one go.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="checked against react-reconciler's commitRoot">
+
+## The commit, in order
+
+<Cols template="1fr 1.3fr 1fr 1fr 1fr" gap={20}>
+<Card variant="top" tone="blue" label="1" title="Before mutation">
+
+<p><Mono>prepareForCommit<br />getSnapshot<br />BeforeUpdate</Mono></p>
+
+<p><O>x11: beginWindowMaps()</O></p>
+
+</Card>
+<Card variant="top" tone="orange" label="2" title="Mutation">
+
+<p><Mono>removeChild<br />insertBefore<br />appendChild<br />commitUpdate<br />commitTextUpdate</Mono></p>
+
+deletions first, children before parents
+
+<p><O>x11: realize() → CreateWindow</O></p>
+
+</Card>
+<Card variant="top" tone="orange" label="3" title="Swap">
+
+<p><Mono>resetAfterCommit<br />root.current = finishedWork</Mono></p>
+
+<p><O>x11: restack, then MapWindow</O></p>
+
+</Card>
+<Card variant="top" tone="orange" label="4" title="Layout">
+
+<p><Mono>commitMount<br />refs attached<br />useLayoutEffect</Mono></p>
+
+<p><O>x11: popups, autoFocus</O></p>
+
+</Card>
+<Card variant="dashed" label="5 · later" title="Passive">
+
+<p><Mono>useEffect</Mono></p>
+
+after the host has had a chance to paint
+
+</Card>
+</Cols>
+
+Steps 1–4 are one synchronous block. Nothing else runs in between, and none of it is ever undone.
+
+<Notes>
+
+Details worth knowing. prepareForCommit is called at the start of the before-mutation pass. The mutation pass walks the effect list depth-first: deletions of a parent's children first, then the children's own mutations, then the parent's placement and update, so a child's commitUpdate runs before its parent's. useInsertionEffect and layout-effect cleanups also run here.
+
+resetAfterCommit runs right after mutation and before root.current is swapped, which is why react-x11 maps its windows there: everything is created and stacked, nothing has run user layout effects yet.
+
+Then the layout pass: commitMount for instances that asked for it, refs, useLayoutEffect, componentDidMount. Passive effects (useEffect) are scheduled for later.
+
+A detail for the very curious: React runs the mutation pass at discrete event priority, so a setState from inside a commit is treated as urgent.
+
+</Notes>
+</Slide>
+
+<Slide source="finalizeInitialChildren runs after each createInstance (two elided for space)">
+
+## Mounting one tree: the real call order
+
+<Cols template="1fr 1fr" gap={32}>
+<Col gap={12}>
+
+<Eyebrow tone="blue">Render phase</Eyebrow>
+
+```js
+// beginWork: top-down
+getRootHostContext()
+getChildHostContext(ctx, 'window')
+getChildHostContext(ctx, 'box')
+getChildHostContext(ctx, 'text')
+// completeWork: bottom-up
+createTextInstance('hi')
+createInstance('text')
+appendInitialChild(text, hi)
+finalizeInitialChildren(text)
+createInstance('box')
+appendInitialChild(box, text)
+createInstance('window')
+appendInitialChild(window, box)
+```
+
+</Col>
+<Col gap={12}>
+
+<Eyebrow tone="orange">Commit phase</Eyebrow>
+
+```js
+prepareForCommit()
+appendChildToContainer(app, window)
+  └ attachTopLevel
+    └ window.realize()
+      CreateWindow, props, child windows
+resetAfterCommit()
+  └ flushWindowRestacks()
+  └ flushWindowMaps()
+      MapWindow
+// layout pass
+commitMount(…) only where
+  finalizeInitialChildren
+  returned true
+```
+
+</Col>
+</Cols>
+
+<Notes>
+
+Walk through this slowly; it is the most useful slide for anyone writing a renderer. beginWork goes down the tree and computes host context for each host element. completeWork comes back up, so the deepest node is created first: the text chunk, then text, then the box, then the window. Each parent is created after its children and immediately given them through appendInitialChild.
+
+By the end of the render phase there is a complete, detached tree of react-x11 nodes, with yoga nodes, and zero X11 requests sent.
+
+The commit then makes exactly one call for the whole thing, appendChildToContainer with the window. react-x11 turns that into realize(), which creates the X window and recurses into child windows. Mapping waits for resetAfterCommit, so a tree of windows appears at once.
+
+commitMount runs later, in the layout pass, only for instances whose finalizeInitialChildren returned true.
+
+</Notes>
+</Slide>
+
+<Slide>
+
+## The trap: two "append"s, two phases
+
+```text
+<window>             already on screen
+  <window panel>     ← appendChild(window, panel)        commit
+    <window dialog>  ← appendInitialChild(panel, dlg)    render
+      <text>hi       ← appendInitialChild(dlg, text)     render
+```
+
+|              | <B>appendInitialChild</B>       | <O>appendChild / insertBefore</O>      |
+| ------------ | ------------------------------- | -------------------------------------- |
+| Phase        | render                          | commit                                 |
+| Parent is    | new, detached, being built      | already mounted                        |
+| Called for   | every edge inside a new subtree | only the root of a new subtree         |
+| Side effects | never                           | yes, but only reaches the subtree root |
+
+Create windows in appendChild and the nested dialog is never created.
+
+<Notes>
+
+This is exactly where I went wrong at first. The fix many people reach for is "fine, I'll move my side effects from createInstance to appendChild, that is commit phase". It is, but React only calls appendChild or insertBefore for the root of a newly placed subtree.
+
+Everything inside that subtree was wired up during render with appendInitialChild, and nothing in the commit visits those edges again.
+
+So the rule is: the commit-phase entry point for a new subtree must walk that subtree itself. In react-x11 that walk is realize(), which goes top-down so every CreateWindow can name its real parent window.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/window/window.js:698">
+
+## One method, both phases
+
+<Cols template="1fr 520px" gap={40}>
+<Col>
+
+```js
+// HostConfig: both twins land in the same place
+appendInitialChild(p, c) { p.insertBefore(c, null) }
+appendChild(p, c)        { p.insertBefore(c, null) }
+// WindowNode
+insertBefore(child, beforeChild) {
+  if (child.isWindow) {
+    this._spliceChild(child, beforeChild);
+    // render: this.window is null, stop here
+    if (this.window && !child.window) {
+      child.realize(this.window); // CreateWindow
+    }
+    pendingRestack.add(this); return;
+  }
+  // drawn nodes: yoga insert + damage claim
+}
+```
+
+</Col>
+<Col gap={28}>
+
+A node built in render has no window yet. Only a commit gives it one.
+
+So "do I have a window?" means "is this parent on screen?"
+
+A keyed reorder is one insertBefore per moved child. Restacking waits for **resetAfterCommit**, so the X server sees one final order.
+
+</Col>
+</Cols>
+
+<Notes>
+
+react-x11's answer to the twins problem is not to care which callback it is in, but to look at state. A WindowNode built in the render phase has window === null until realize() runs in a commit.
+
+So if the parent already has a window, this insert is a commit-phase insert into a mounted parent and the child is created now, against its real parent. If the parent has no window, it is a render-phase build, and the child will be created when the parent realizes and recurses.
+
+Restacking is batched: React reorders a keyed list with one insertBefore per moved child, and the intermediate orders are never visible, so the X stacking order is fixed once in resetAfterCommit.
+
+</Notes>
+</Slide>
+
+<Slide source="src/Reconciler.js:189">
+
+## Host context: facts flowing down
+
+<Cols template="1fr 540px" gap={40}>
+<Col>
+
+```js
+getChildHostContext(parent, type) {
+  return {
+    isInsideText: parent.isInsideText || type === 'text',
+    isInsideSvg:  parent.isInsideSvg  || type === 'svg',
+    atRoot:       parent.atRoot && type === THEME_SCOPE,
+    inWindow:     type === 'window' || type === 'popup',
+  };
+},
+
+createTextInstance(text, root, ctx) {
+  if (!ctx.isInsideText && !ctx.isInsideSvg)
+    throw new Error(`raw text ${…} must be
+      wrapped in a <text> element`);
+  return new TextChunkNode(text, root);
+}
+```
+
+</Col>
+<Col gap={28}>
+
+Children are built **before** their parents, so a child cannot ask its parent anything. Context is how it finds out where it is.
+
+Thrown in render, the error reaches an **error boundary**, and nothing has touched the server.
+
+Inside {'<svg>'}, every tag becomes an SVG element: context switches the vocabulary.
+
+</Col>
+</Cols>
+
+<Notes>
+
+Host context is the one channel from parent to child during render. beginWork computes it on the way down; completeWork reads it on the way up when it creates the instance.
+
+react-x11 uses it for validation that has to happen before the parent exists: raw text outside a text element, a box at the root with no window above it, an element nested inside text. Because these throw in the render phase, an error boundary can catch them, and because createInstance has made no X calls, there is nothing to clean up.
+
+Context is also how SVG works: under an svg element every child type is an SVG element (circle, path), not a react-x11 node, exactly like react-dom switches namespaces.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="src/Reconciler.js:239 (simplified)">
+
+## createInstance builds objects, not windows
+
+<Cols template="1fr 520px" gap={40}>
+<Col>
+
+```js
+createInstance(type, props, root, ctx, fiber) {
+  switch (type) {
+    case 'window':
+      // No X11 calls here: the render phase
+      // may be discarded. The real window is
+      // created top-down in the commit.
+      node = new WindowNode(root, attrs, props); break;
+    case 'box':  node = new BoxNode(props, root);  break;
+    case 'text': node = new TextNode(props, root); break;
+    // image, canvas, textinput, svg, glarea…
+    default: node = createRegisteredNode(type, …);
+  }
+  node._reactFiber = fiber; // DevTools, errors
+  return node;
+}
+```
+
+</Col>
+<Col gap={24}>
+
+### What a node holds
+
+- props and the resolved style
+- one yoga layout node
+- its children list
+- its last laid-out rect, **abs**
+
+No socket traffic. If React throws it away, nothing on the server noticed.
+
+The unknown-element error lists every supported tag.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is the real createInstance, trimmed. Every built-in element is a class from src/nodes; third-party elements registered with registerElement() are consulted only after the switch runs out. Note the comment on the window case: it is the policy of the whole renderer written down where the temptation is.
+
+The node keeps its fiber for two reasons: React DevTools can map a host instance back to a component, and error messages can name the component that rendered the element, which matters when the error comes from three layers down (ntk, yoga, the X server).
+
+The same rule applies to the foreign element, which embeds another process's window: a reparent issued from a render that React then discards would have moved someone else's window for real.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/window/window.js:318 (simplified)">
+
+## realize(): the window is born in the commit
+
+<Cols template="1fr 640px" gap={40}>
+<Col>
+
+```js
+realize(parentWindow) { // commit only
+  const natural = this._measure();
+  attrs.width = natural.width;
+  attrs.height = natural.height;
+  attrs.parent = parentWindow;
+  attrs.backgroundPixel = pixelFor(bg);
+  attrs.eventMask |= WINDOW_EVENT_MASK;
+  const wnd = app.createWindow(attrs);
+  this._attachWindowListeners();
+  for (const c of this.children)
+    if (c.isWindow) c.realize(wnd);
+  this._realizeChildWindows(); // glarea…
+  applyWindowStates(wnd, …);
+  this._applyTransientFor(…);
+  // MapWindow: in resetAfterCommit
+}
+```
+
+</Col>
+<Col gap={22}>
+
+**Lay out first.** An auto-sized window is created at its final size, with no resize jump after mapping.
+
+**Parent at creation.** Top-down, so there's never a ReparentWindow.
+
+**Background pixel.** The server fills newly exposed area with the theme colour, so no white flash on resize.
+
+**State before map.** EWMH state and WM\_TRANSIENT\_FOR are read when the WM frames the window: open fullscreen without flashing.
+
+</Col>
+</Cols>
+
+<Notes>
+
+realize() is the commit-phase walk the twins slide asked for. It is called from appendChildToContainer for a top-level window, from a mounted parent's insertBefore for a nested one, and from commitMount for a popup.
+
+Order matters at every step. Layout runs before CreateWindow, so a window whose size is auto is born the right size; doing it afterwards means a window mapped at a default size and corrected a frame later. The parent is known at creation because realization is top-down.
+
+The background pixel is what X paints into newly exposed area before the app has drawn it, so setting it to the colour about to be painted makes a resize flash invisible.
+
+And window-manager state (fullscreen, maximized, transient-for, decorations, XDND awareness) is written before the map, because an unmapped window declares its initial state while a mapped one has to ask. Mapping itself is deferred to resetAfterCommit so a tree of windows appears at once.
+
+</Notes>
+</Slide>
+
+<Slide source="src/Reconciler.js:392 and :413">
+
+## "Call me back once I'm attached"
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```js
+// render: built, not attached yet
+finalizeInitialChildren(inst, type, props) {
+  return type === 'popup'
+    || Boolean(props.autoFocus)
+    || Boolean(props.trapFocus)
+    || hasDropProps(props);
+},
+
+// commit, layout pass: in the tree
+commitMount(inst, type, props) {
+  if (type === 'popup') inst.realize(null);
+  if (props.trapFocus) inst._syncFocusScope();
+  if (hasDropProps(props))
+    inst.root._registerDropTarget(inst);
+  if (props.autoFocus) inst.focus();
+}
+```
+
+</Col>
+<Col gap={28}>
+
+Return **true** and React calls commitMount in the layout pass, after every node of this commit is in place.
+
+Focus and drop targets need the window's event manager, which a node can only reach once it is attached.
+
+A popup with an **anchor** measures its content, then places itself, then is created.
+
+</Col>
+</Cols>
+
+<Notes>
+
+finalizeInitialChildren is the last render-phase callback for a new instance, and its boolean return value is a request: please call commitMount for this instance during the commit. React DOM uses it for autoFocus.
+
+react-x11 uses it for four things that need the node to be attached: popups (realized against the screen root, after measuring so an auto-sized popup is born the right size and flipped or clamped to the screen), autoFocus and trapFocus (focus lives on the window's EventManager), and drag-and-drop targets (registered on the window).
+
+commitMount runs in the layout pass, after the mutation pass, so the whole tree of this commit is attached and the ancestors are realized. It is also the first moment refs are valid; getPublicInstance hands a ref on a window the live ntk window object.
+
+</Notes>
+</Slide>
+
+<Slide source={'"in one go" = workLoopSync; time-sliced = workLoopConcurrent, checking shouldYield() between fibers'}>
+
+## Every setState gets a lane
+
+<table className="mono-first big">
+  <thead>
+    <tr><th style={{ width: '30%' }}>Lane</th><th style={{ width: '38%' }}>Where it comes from</th><th style={{ width: '32%' }}>How it renders</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>SyncLane</td><td>click, key press, focus, flushSync</td><td><O>in one go, right away</O></td></tr>
+    <tr><td>InputContinuous</td><td>mouse move, wheel, drag</td><td><O>in one go</O></td></tr>
+    <tr><td>DefaultLane</td><td>timers, sockets, promises</td><td><O>in one go</O></td></tr>
+    <tr><td>TransitionLanes</td><td>startTransition, useDeferredValue</td><td><B>time-sliced, interruptible</B></td></tr>
+    <tr><td>RetryLanes</td><td>Suspense retries</td><td><B>time-sliced</B></td></tr>
+    <tr><td>Idle · Offscreen</td><td>idle work, hidden {'<Activity>'}</td><td><B>time-sliced, last</B></td></tr>
+  </tbody>
+</table>
+
+Lanes are bits, so pending work is one bitmask. A lane left waiting too long **expires** and renders synchronously.
+
+<Notes>
+
+A lane is a bit in a 31-bit mask; React batches updates by lane and always works on the highest-priority lanes pending. Two render loops exist. workLoopSync processes fibers until done. workLoopConcurrent checks shouldYield between fibers, and the scheduler says yield every 5 ms or so, so a big transition render never blocks input for long.
+
+In the installed react-reconciler, sync, continuous and default lanes use the sync loop; only transitions, retries, idle and offscreen work are time-sliced.
+
+Expiration is the starvation guard: a lane that has been pending past its timeout is added to root.expiredLanes and rendered synchronously, so a constant stream of urgent updates cannot postpone a transition forever.
+
+</Notes>
+</Slide>
+
+<Slide source="src/priority.js:24, src/events.js">
+
+## The host tells React how urgent an update is
+
+<Cols template="1fr 520px" gap={40}>
+<Col gap={24}>
+
+```js
+// src/priority.js, wired into the HostConfig
+let current = NoEventPriority;
+resolveUpdatePriority() {
+  return current !== NoEventPriority
+    ? current : DefaultEventPriority;
+}
+runWithPriority(p, fn) {
+  const prev = current; current = p;
+  try { return fn(); } finally { current = prev; }
+}
+```
+
+```js
+// src/events.js
+_onMouseDown(native) { runWithPriority(Discrete, …) }
+_onMouseMove(native) { runWithPriority(Continuous, …) }
+```
+
+</Col>
+<Col gap={28}>
+
+react-dom reads **window.event.type**. There is no window.event here, so the dispatcher says it.
+
+Press, release, key, focus: **Discrete**. Move, wheel, hover: **Continuous**.
+
+A window-manager close or another app's message is a user action too: Discrete.
+
+</Col>
+</Cols>
+
+<Notes>
+
+React asks the host for the priority of an update at the moment setState is called, through resolveUpdatePriority. React DOM answers by looking at the global window.event. A renderer without a global event needs its own ambient variable, which is all priority.js is: a module-level current priority, set around each dispatch and restored after.
+
+The event manager wraps presses, releases, keys and focus changes as discrete, and moves, wheel and hover changes as continuous. A setState from a timer, a network callback or a promise finds no priority set and gets the default lane.
+
+The same discrete wrapping is used for things that are user actions arriving by another route: the window manager asking to close the window, or another X client sending a ClientMessage.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="scheduler yields between fibers; a pending higher lane makes the next work loop start fresh">
+
+## A click arrives mid-transition
+
+<InterruptTimeline />
+
+<Grid cols={3} gap={32}>
+<Card title="What was lost">
+
+Component renders, and every createInstance from the abandoned attempt.
+
+</Card>
+<Card title="What the host saw">
+
+Nothing, if createInstance only built objects. Orphaned windows, if it called CreateWindow.
+
+</Card>
+<Card title="Why it's safe">
+
+Updates are queued on fibers, not consumed. A restart replays them.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Walk the timeline left to right. A startTransition update is rendering in time slices: each slice processes fibers until shouldYield says the 5 ms are up, then returns to the event loop. The X event for a click is handled in that gap. Its handler runs at discrete priority and its setState lands on SyncLane.
+
+When React next picks work, the highest-priority lane is no longer the one the work-in-progress tree was built for, so prepareFreshStack throws the half-built tree away and starts over from current, rendering only the click's update, and commits it. Then the transition starts again from scratch.
+
+Nothing was lost semantically: updates live in queues on fibers and are only removed when a commit consumes them, so the restart replays both the transition's update and the click's. What was lost is work, including every host instance created during the abandoned attempt. If those were real windows, they are now orphans on the server.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement">
+
+# If the garbage collector can't undo it, it doesn't belong in render.
+
+<Grid cols={3} gap={48}>
+<Card variant="line" tone="blue" title="Render">
+
+Allocate objects, validate, compute layout inputs
+
+</Card>
+<Card variant="line" tone="orange" title="Commit">
+
+Talk to the server: create, map, reparent, destroy
+
+</Card>
+<Card variant="line" title="Effects">
+
+Talk to everything else: D-Bus, menus, tray, timers
+
+</Card>
+</Grid>
+
+<Notes>
+
+The one-line rule I wish I had started with. If your host instances are plain objects, the render phase can be as wasteful as React likes.
+
+The moment an instance owns something outside the JS heap (a window, a socket conversation, a native view, a file), its creation belongs to the commit, and its destruction to removeChild or detachDeletedInstance.
+
+Anything that is not part of the tree at all belongs in an effect with a cleanup, which is the next part of the talk.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/node.js:660 (simplified)">
+
+## applyProps: from "changed" to "stale pixels"
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```js
+applyProps(newProps, oldProps) {
+  const prev = this.style;
+  this.props = newProps;
+  const style = this._syncStyle(newProps);
+  const moved = style !== prev &&
+    applyLayoutStyle(this.yoga, style, prev);
+  if (moved) {
+    this._invalidateLayout(reason);
+  } else {
+    const drew =
+      paintPropsChanged(style, prev) ||
+      this.paintChanged(newProps, oldProps);
+    root.invalidate(false,
+      drew ? this : NO_DAMAGE, 'props');
+  }
+}
+```
+
+</Col>
+<Col gap={20}>
+
+<Card variant="rule" tone="blue" title="Something moved">
+
+The layout pass decides, from the old and new rect of each node.
+
+</Card>
+
+<Card variant="rule" tone="orange" title="It draws differently">
+
+One rect: this node's paint bounds.
+
+</Card>
+
+<Card variant="rule" tone="muted" title="Nothing it draws changed">
+
+NO_DAMAGE. No frame is scheduled at all.
+
+</Card>
+
+Style is compared by **value**. Handlers, ref and children never count as paint.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is where commitUpdate lands for every element. The style is resolved first (flattening arrays, theme tokens, the cascade of inherited text properties, the current :hover and :active blocks). If the resolved style object is the same object as before, which is what a hoisted style constant gives you, everything after is skipped.
+
+Otherwise the layout properties are pushed into yoga; applyLayoutStyle reports whether any of them changed. If so, the node cannot know what moved, so it defers to the layout pass. If not, the question is whether anything it draws changed: paint style compared by value (a style React rebuilt with the same contents costs nothing), plus any non-style prop that differs, since that is where a subclass's content lives: an image src, a canvas onDraw, an input value.
+
+Event handlers, ref and children are skipped because they are rebuilt every render and never painted. If nothing it draws changed, it claims NO_DAMAGE, and a commit in which every node says so schedules no frame. Hovering a control that ignores its hover state used to cost a full-window repaint before this rule existed.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/window/flush.js:118">
+
+## Inside one frame: WindowNode.flush()
+
+<Cols template="1fr 560px" gap={40}>
+<Col gap={14}>
+
+<Numbered n="1">
+
+**Animations** advance. A transition claims its rect every tick.
+
+</Numbered>
+
+<Numbered n="2">
+
+**Layout**, if dirty: yoga, content floors, then absolutize.
+
+</Numbered>
+
+<Numbered n="3">
+
+**Layout diff**: each node whose rect changed claims old and new.
+
+</Numbered>
+
+<Numbered n="4">
+
+**Blits**: a pure scroll or a rigid move is copied, not repainted.
+
+</Numbered>
+
+<Numbered n="5">
+
+**Take damage**: up to 4 rects. None named means the whole window.
+
+</Numbered>
+
+<Numbered n="6">
+
+**Paint** one pass per rect: clip, background, culled tree walk.
+
+</Numbered>
+
+<Numbered n="7">
+
+**Present**: ntk copies only the rects that were drawn.
+
+</Numbered>
+
+</Col>
+<Col>
+
+<Card variant="inverse" title="When does it run?">
+
+ntk's <B>requestAnimationFrame</B>: one frame per window, events coalesced into it.
+
+Gated on a <B>fence</B>: the next frame waits until the server reports the last one shown.
+
+That is backpressure for free. A slow server or a slow network gets fewer, bigger frames, not a growing queue.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Every window node owns its own frame. Commits only record damage and ask for a frame; the frame does the expensive work once, however many commits happened since the last one. The order inside it matters. Animations step first because they may change layout.
+
+Layout runs only if something marked it dirty, and the walk that converts yoga's relative positions into absolute window rects (absolutize) doubles as the layout diff: any node whose rect changed claims both its old and new rect, which is how a reflow bounds its own repaint. Then two copy fast paths, covered later. Then the damage list is taken and painted one rect at a time.
+
+Present is ntk's job: it records the clip of every drawing operation as the region it touched and copies only those regions from the back buffer to the window. The frame clock is ntk's requestAnimationFrame, which is fenced on the server, so on a slow link you get fewer frames rather than an ever-growing queue of them.
+
+</Notes>
+</Slide>
+
+<Slide source="src/events.js:313, src/frames.js">
+
+## Answer the input on the event that started it
+
+<Cols template="1fr 600px" gap={40}>
+<Col gap={28}>
+
+<Code size={26}>
+
+```js
+export function discrete(fn) {
+  return (ev) => {
+    fn(ev);               // setState on SyncLane
+    flushSyncWork();      // render + commit now
+    flushPendingFrames(); // paint now
+  };
+}
+```
+
+</Code>
+
+Waiting for the next requestAnimationFrame would add up to a frame plus a round trip, for a paint that costs a fraction of a millisecond.
+
+</Col>
+<Col gap={24}>
+
+<Card title="The frame gate">
+
+A window whose last frame has not been shown keeps its scheduled frame. Spin the wheel: the first notch paints at once, the rest fold into one catch-up frame.
+
+</Card>
+
+<Card title=":active is not React state">
+
+The press state is a style block the renderer repaints on the press, with no re-render.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Perceived latency is measured from the input, not from the work. A discrete event has exactly one visible response (a button darkens, a caret lands), so react-x11 does not route it through the frame clock. When the handler unwinds, discrete() flushes React's sync work and then paints every window that owes a frame and whose server has caught up.
+
+The gate is what keeps a burst sane: a window whose previous frame has not landed keeps the frame it already scheduled, and the extra events coalesce into it.
+
+The other half of answering input is the press state. A Switch toggles on release, because that is what a click is, but the user starts watching on the press. So every control has a distinct pressed look, drawn on the press. The :active style block is resolved by the renderer as a repaint of one node over the whole press chain (the node under the pointer and its ancestors), without a React re-render.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" gap={48}>
+
+## Two reasons pixels go stale
+
+<Grid cols={2} gap={40} style={{ flex: 1 }}>
+<Card variant="top" tone="orange" label="Inside: our state changed" title="The tree no longer matches the screen">
+
+A prop, a hover, a reflow, a scroll, an animation tick.
+
+Every change names what it touched:
+
+<O><Mono>invalidate(layoutChanged, node)</Mono></O>
+
+<Spacer />
+
+**Answer:** repaint the claimed rects.
+
+</Card>
+<Card variant="top" tone="blue" label="Outside: the world changed" title="The screen no longer shows the window">
+
+Another window moved away, the window was resized or mapped.
+
+The X server sends an **Expose** event: the classic onPaint / WM_PAINT.
+
+<Spacer />
+
+**Answer:** copy from the back buffer. React is not involved.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Two different questions get called "repaint" and they have different answers. The first is internal: our own state changed, so the picture of the tree on screen is wrong. Only the renderer knows which part, and the next slides are about how precisely it can say.
+
+The second is external: the picture was right, but the screen lost it, because the window was covered and uncovered, resized or newly mapped.
+
+In the immediate-mode model of classic Xlib or Win32, the application redraws from its state on every Expose or WM_PAINT. With a retained back buffer, most of those become a copy.
+
+</Notes>
+</Slide>
+
+<Slide source="pinned by pixel tests against a full repaint (test/dirty-rect.test.js)">
+
+## What each kind of change claims
+
+| Change                 | Damage claimed                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| colour, text, border   | the node's paint bounds: one rect                                                                                      |
+| identical re-render    | **NO_DAMAGE**: no frame is scheduled at all                                                                            |
+| :hover / :active       | that node, repainted by the renderer, with no React render                                                             |
+| child added or removed | the parent's bounds **before**, captured while the leaving child is still attached, plus the same bounds after layout |
+| layout moved things    | the layout diff: old and new rect of every node that moved, and nothing else                                           |
+| scroll                 | CopyArea the band that stays visible, paint only the strip that appeared                                               |
+| animation tick         | the node's rect on every frame, including the last one                                                                 |
+| nothing named          | the whole window: the safe default when a caller can't say                                                             |
+
+<Notes>
+
+Each row is a rule with a test behind it, and most of them were found by watching a debug log print FULL WINDOW while hovering a control. A paint-only change claims the node's paint bounds, which include shadows and outlines. An identical re-render claims nothing and schedules no frame. Hover and active are style blocks the renderer applies as a repaint of one node.
+
+A child-list change has a subtle half: the before-rect must be captured while the departing child is still attached, otherwise the region it used to cover is never erased. Layout changes are never bounded by the node that changed, because a reflow can move anything; instead the layout pass diffs every node's old and new rect.
+
+Scrolls get a copy fast path. Animations claim every frame including the last. And a claim that names no node repaints the whole window, deliberately: forgetting costs speed, not correctness.
+
+Set REACT_X11_DEBUG_PAINT=1 to flash damage rects on screen, or =full to get a warning with a stack trace for every full-window repaint.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="ntk lib/window.js _handleExpose; src/nodes/window/listeners.js:87; onExpose prop still fires">
+
+## Expose: when the world damages the window
+
+<Cols template="1fr 560px" gap={40}>
+<Col>
+
+```js
+// ntk Window, on Expose(x, y, w, h)
+if (this._backingValid)
+  X.CopyArea(backing, this.id, gc, x, y, x, y, w, h);
+else
+  this._requestRedraw(); // 'draw' next frame
+
+// react-x11 WindowNode
+wnd.on('draw', () => {
+  this._frameReasons.add('expose');
+  this.needsPaint = true; // no rect: everything
+  this.flush();
+});
+```
+
+While a resize is in flight, **backgroundPixel** is the theme's background, so the server's fill is already the right colour.
+
+</Col>
+<Col gap={24}>
+<Card variant="rule" tone="muted" title="Immediate mode">
+
+Classic Xlib, Win32: every Expose or WM_PAINT asks the app to redraw that rect from its state.
+
+</Card>
+<Card variant="rule" tone="blue" title="Retained, double-buffered">
+
+A valid back buffer answers with a copy. The tree repaints only when the buffer itself is lost: first map, resize.
+
+</Card>
+</Col>
+</Cols>
+
+<Notes>
+
+This is the onPaint question. In the immediate-mode model the server keeps nothing for you; every Expose means draw that rectangle again from your state. ntk keeps a back buffer per window, a server-side pixmap the size of the window that every frame is drawn into, so an Expose is answered with a CopyArea from that pixmap and nothing above ntk ever hears about it.
+
+Only when the back buffer is not valid (it was just created on the first map, or reallocated after a resize) does ntk ask for a redraw. It emits draw on its next frame, and WindowNode treats that as damage with no rect, which means the whole window, recorded with reason expose so the debug tools can say why.
+
+There is one more trick for resizes: when the window grows, the server fills the new area before the app has drawn it. react-x11 sets the window's X background pixel to the theme's background colour at creation, so that fill is already the right colour and a dark theme does not flash white.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source={'src/nodes/text.js · docs/macos.md "Text: the engine contract" · docs/windows.md "Text"'}>
+
+## Text: four engines, one layout
+
+| Backend     | Finds fonts            | Shapes, bidi, breaks                  | Rasterizes                      | Caches                                   |
+| ----------- | ---------------------- | ------------------------------------- | ------------------------------- | ---------------------------------------- |
+| **X11**     | fc-match, or your files | ntk: fontkit, bidi-js, UAX #14, all JS | ntk, A8, no hinting             | glyph sets on the server, shared by apps |
+| **Wayland** | fc-match               | ntk, same as X11                      | ntk, A8                         | a GLES atlas per device                  |
+| **Cocoa**   | CoreText               | CoreText                              | CoreGraphics, grayscale AA      | CoreGraphics                             |
+| **win32**   | DirectWrite            | DirectWrite                           | Direct2D, ClearType when opaque | DirectWrite                              |
+
+<Grid cols={2} gap={32}>
+<Card variant="rule" tone="blue" title="One question for layout">
+
+yoga asks a {'<text>'} `measureContent(width)`, memoized per width, rounded up to whole pixels. Every backend answers it.
+
+</Card>
+<Card variant="rule" tone="orange" title="Pixels differ, layout must not">
+
+Cocoa answers "narrowest width" with the same UAX #14 package as ntk, so a column wraps at the same words everywhere.
+
+</Card>
+</Grid>
+
+<Notes>
+
+Text is where the backends differ most, so it is worth a map. On X11 and Wayland everything is ntk, in JavaScript: fontconfig's fc-match finds the face, a vendored fontkit shapes it, bidi-js orders it, the linebreak package breaks it, and ntk's own rasterizer draws coverage masks with no hinting. X11 keeps those masks on the server as glyph sets; Wayland packs them into a GL texture atlas.
+
+On macOS CoreText does finding, shaping, bidi and wrapping, and CoreGraphics rasterizes with grayscale antialiasing. On Windows DirectWrite and Direct2D do the same jobs, with ClearType where the target is opaque.
+
+The renderer's job is to keep layout identical across that. Yoga only ever asks a text node one thing, how big are you at this width, memoized per width and rounded up to whole pixels so a fractional answer cannot ripple through flexbox.
+
+And one subtle place where engines disagree, the min-content width, which is the width of the longest unbreakable word, Cocoa answers with the same UAX #14 line-breaking package ntk uses, rather than CoreText's breaker. Pixel-level output still differs per backend, and the tests know it.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="ntk docs/fonts.md · ntk#504 (WOFF2), #227, #333 (opsz), #434 (CBDT) · react-x11#347 (loadFont)">
+
+## Formats, axes, features, colour
+
+<Grid cols={2} gap={20}>
+<Card dense title="Formats">
+
+TTF, OTF, TTC, WOFF and WOFF2 wherever ntk draws. WOFF2 through the runtime's own Brotli: 21.4 → 3.9 ms. Gaps: Cocoa's loadFont refuses WOFF2 (#805); win32 wants the bare sfnt.
+
+</Card>
+<Card dense title="Variable fonts">
+
+`fontWeight` drives **wght**, fontVariationSettings the rest. **opsz** follows the size: a 13 px SF label gets the Text cut. Cocoa doesn't move wght yet (#806).
+
+</Card>
+<Card dense title="Features">
+
+`fontVariantNumeric: 'tabular-nums'`, fontFeatureSettings like ['tnum', 'zero'], and letterSpacing, which drops optional ligatures. #604
+
+</Card>
+<Card dense title="Colour and emoji">
+
+COLR and sbix faces draw; a bitmap-only CBDT face is passed by for the next. X11 glyph sets are A8 coverage: one ink colour. CoreText cascades emoji in colour.
+
+</Card>
+</Grid>
+
+<Card dense variant="inverse" title="Finding a font is environment, not code">
+
+fc-match follows PATH: on macOS, Homebrew's fontconfig maps sans-serif to Hiragino (#86). A first fallback lookup costs ~110 ms. Ship your faces with <B>loadFont</B> and @fontsource from npm, and every machine draws the same text.
+
+</Card>
+
+<Notes>
+
+What a UI developer can count on. Formats: ntk reads every container a web developer ships, TTF, OTF, collections, WOFF and WOFF2, and decompressing WOFF2 with the runtime's native Brotli made it five times faster. The native backends are behind in places, and those gaps are filed.
+
+Variable fonts are first class on ntk: fontWeight is the weight axis, fontVariationSettings reaches any other axis, and the optical size axis follows the font size automatically, the way browsers do, so small labels in SF get the cut designed for small text. OpenType features are there for UI work: tabular figures for columns of numbers that must not jiggle, slashed zero, stylistic sets, and letter spacing, which turns off optional ligatures as CSS does.
+
+Colour is where X11 is honest about its limits: its glyph sets are alpha masks, so text has one ink colour; a colour bitmap emoji font is skipped for the next face that has the character; CoreText draws emoji in colour.
+
+And the practical advice: system font lookup is an environment fact, slow on first use and different per machine, so an app that cares about its typography ships its faces from npm.
+
+</Notes>
+</Slide>
+
+<Slide gap={28} source="bidi-js in ntk lib/text/shape.js · react-x11#275 (rtl), #341/#342 (fields) · Latin-only text skips bidi (ntk#379)">
+
+## Bidi: one line, two directions
+
+<BidiRows />
+
+<Small>UAX #9 gives each character a level: even runs go left to right, odd runs right to left. Each run is shaped on its own, then reordered.</Small>
+
+<Grid cols={3} gap={20}>
+<Card variant="rule" tone="blue" title="direction: 'rtl'">
+
+mirrors layout through logical props: paddingStart, marginEnd, start / end
+
+</Card>
+<Card variant="rule" tone="blue" title="Base level from the box">
+
+not the first strong character; no dir="auto" yet
+
+</Card>
+<Card variant="rule" tone="blue" title="Caret keys are logical">
+
+← moves toward the start, also in an RTL field
+
+</Card>
+<Card variant="rule" tone="orange" title="Selection splits">
+
+a logical range across runs is several rects on screen
+
+</Card>
+<Card variant="rule" tone="orange" title="Ellipsis goes last visually">
+
+an RTL line is cut on its left
+
+</Card>
+<Card variant="rule" tone="orange" title="Empty is a paragraph too">
+
+an empty RTL field's caret sat on the left (ntk#533)
+
+</Card>
+</Grid>
+
+<Notes>
+
+Bidirectional text is the other thing a UI toolkit cannot treat as a string. In memory, characters are stored in the order they are typed: Hello, then the Hebrew word shalom starting with shin, then 42. The Unicode bidirectional algorithm, UAX #9, gives every character an embedding level, and runs at odd levels are displayed right to left, so on screen the Hebrew letters appear reversed while the digits and the Latin stay left to right.
+
+ntk runs bidi-js before shaping, shapes each direction run on its own, then reorders the runs for display, and skips the whole thing for text with no right-to-left characters.
+
+For UI the consequences are everywhere. direction rtl on a box mirrors the layout through logical properties. A text's base direction comes from its box rather than guessing from the first strong character; there is no dir auto yet. Arrow keys move the caret logically, toward the start of the text, which is what most native toolkits do; visual caret movement is an open question. A selection that is one range in memory can be several rectangles on screen. Truncation puts the ellipsis at the visual end, the left of an RTL line.
+
+And the bug that shows how deep this goes: bidi-js returns no paragraph for an empty string, so an empty right-to-left field drew its caret on the wrong side until ntk 8.23.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="ntk lib/text/{fontmanager,shape,font,layout,glyphs}.js · Arial 32px, shaped by ntk on this machine">
+
+## Text on X11: from a string to one request
+
+<Grid cols={8} gap={12}>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**1 Match**
+
+fc-match, or a font you loaded
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**2 Bidi**
+
+UAX #9 levels, direction runs
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**3 Itemize**
+
+fallback face per missing char
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**4 Shape**
+
+fontkit: GSUB, GPOS, kerning
+
+</Card>
+<Card variant="top" tone="blue" style={{ padding: 20 }}>
+
+**5 Layout**
+
+UAX #14 breaks, memo per word
+
+</Card>
+<Card variant="top" tone="orange" style={{ padding: 20 }}>
+
+**6 Rasterize**
+
+new glyphs only, once per size
+
+</Card>
+<Card variant="inverse-top">
+
+**7 AddGlyphs**
+
+upload, once
+
+</Card>
+<Card variant="inverse-top">
+
+**8 Composite**
+
+one request per draw
+
+</Card>
+</Grid>
+
+<Cols template="1fr 560px" gap={40}>
+<Col gap={12}>
+
+<Eyebrow>What shaping hands the drawing layer</Eyebrow>
+
+```js
+run = { font, size: 32, glyphs: [
+  { id: 55, ax: 17.78 }, // T, kerned with y
+  { id: 92, ax: 16 },    // y
+  { id: 83, ax: 17.8 },  // p
+  { id: 72, ax: 17.8 },  // e   (dx, dy: rare, marks)
+]}
+```
+
+</Col>
+<Col gap={20}>
+
+Steps 1–6 are JavaScript in our process. The server only stores bitmaps and blends them.
+
+A glyph is an **id** and an **advance**. The advance differs from the font's default only at a kern, a mark or rounding drift.
+
+</Col>
+</Cols>
+
+<Notes>
+
+The whole text pipeline on X11 lives in ntk and is pure JavaScript. Matching asks fontconfig's fc-match, or takes a face the app loaded. bidi-js computes the Unicode bidirectional levels and splits the string into direction runs. Each run is split again wherever the primary face lacks a character, using fontconfig's coverage data to pick a fallback.
+
+fontkit, vendored into ntk, shapes each piece: GSUB substitutions such as ligatures and Arabic joining forms, and GPOS positioning such as kerning and mark attachment. Layout breaks lines with UAX #14 and memoizes shaping per word, so a resize re-wraps without reshaping.
+
+Only then does anything reach the server: glyphs it has not seen at this size are rasterized and uploaded once, and every draw after that is a single CompositeGlyphs request.
+
+The output of shaping, shown here for the word Type in Arial at 32 px, is just glyph ids and advances. Notice T's advance: 17.78 instead of its default 19.55, because the font kerns T against y. Offsets dx and dy exist for marks and are rare in UI text.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement">
+
+# Making it fast
+
+<Lead>Faster code helps. Doing less work helps more.</Lead>
+
+<Grid cols={3} gap={48}>
+
+<Card variant="line" tone="orange" title="Ship the cheapest form">
+
+Commands or pixels, chosen per platform and per drawing
+
+</Card>
+
+<Card variant="line" tone="blue" title="Draw only the newest state">
+
+A UI only has to be eventually consistent
+
+</Card>
+
+<Card variant="line" title="Spend a budget">
+
+High refresh or high detail: you rarely get both
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+Section opener. Everything so far was about correctness: what to repaint and when. This part is about speed, and the honest summary of a year of perf PRs across react-x11 and react-x11-components is that the big wins rarely came from making a function faster.
+
+They came from three kinds of not doing work: shipping the cheapest representation of a drawing for the platform it is going to, never drawing a state that is about to be replaced, and deciding how much each frame is allowed to cost, then degrading detail rather than frame rate when the budget runs out.
+
+Every number in this section is from a merged PR or a design doc in the two repos, with the PR named on the slide.
+
+</Notes>
+</Slide>
+
+<Slide source="docs/remote.md (bench baseline) · react-x11#441">
+
+## Ship drawing commands, or ship pixels?
+
+<Cols template="1fr 1fr" gap={40}>
+
+<Card variant="top" tone="orange" label="X11" title="Send commands; the server draws">
+
+XRender composites, glyph runs, trapezoids. Glyphs and corner shapes are uploaded once and cached on the server.
+
+<Cols template="1fr 1fr" gap={32}>
+<Stat value="4.2 kB" label="mount a window of 40 boxes and labels: 110 requests" />
+<Stat value="11.2 kB" label="10 wheel notches over 500 rows" />
+</Cols>
+
+Works unchanged over SSH.
+
+</Card>
+
+<Card variant="top" tone="blue" label="Cocoa · win32 · Wayland" title="Rasterize here, present pixels">
+
+CoreGraphics into an IOSurface, Direct2D into DirectComposition, a GLES rasterizer of our own on Wayland.
+
+No wire to pay for, but every pixel is CPU or GPU time in our process.
+
+So a pass is cheaper: Cocoa keeps **16** damage rects, X11 keeps 4. Twelve scattered cells: 11.9 → 2.8 ms.
+
+</Card>
+
+</Cols>
+
+<Notes>
+
+The deepest platform difference is where pixels get made. On X11 react-x11 never sends pixels for ordinary UI: it sends drawing commands, and the X server rasterizes them. That is why an app runs over ssh with no changes. The numbers are from the protocol bench baseline in docs/remote.md: mounting a window with 40 boxes and their labels is 110 requests and 4.2 kilobytes on the wire; ten wheel notches through a 500-row list are 11.2 kilobytes.
+
+On Cocoa, win32 and Wayland we rasterize in our own process and hand the system finished pixels, which removes the wire and makes every pixel our CPU's or GPU's problem.
+
+The cost model changes accordingly: a paint pass on X11 is a whole walk of the tree plus server work, so the damage list is capped at four rects; on Cocoa a pass is one CoreGraphics clip, so it keeps sixteen, and twelve scattered cell updates went from 11.9 ms and 1.47 megapixels repainted to 2.8 ms and 0.26 (react-x11#441).
+
+</Notes>
+</Slide>
+
+<Slide source="react-x11#199 (examples:raster-gate, ntk routeRaster) · react-x11#890 (ntk 8.23.2)">
+
+## The rasterization gate: decided per drawing
+
+<Cols template="1fr 560px" gap={48}>
+<Col>
+
+For each shape, ntk picks: rasterize the coverage **here** and upload it (PutImage), or send **trapezoids** for the server to fill (AddTraps).
+
+| Policy        | AddTraps | PutImage | bytes out |
+| ------------- | -------: | -------: | --------: |
+| default gate  |      568 |     2052 |    6.5 MB |
+| always local  |      132 |     3119 |   14.1 MB |
+| always server |     1211 |        0 |    1.6 MB |
+
+<Small>Six full repaints of a 48-cell wall on XQuartz. Gate defaults: area under 64×64, under 150 bytes per edge.</Small>
+
+</Col>
+<Col>
+
+<Card variant="inverse" title="The right answer is per server">
+
+Defaults tuned on XQuartz can cost 10–40× per frame on glamor, where trapezoids are a software fallback.
+
+</Card>
+
+<Card variant="inverse" title="Same lesson, one more time">
+
+Path clips sent as PutImage instead of traps on Xwayland: <O>45–53 ms → 1.2 ms</O> a frame.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Even on X11 it is not purely commands. For anything that is not a rectangle or a glyph, a rounded shape or a path, ntk has a choice per drawing: compute the coverage mask locally and upload it with PutImage, or describe it as trapezoids and let the server rasterize them. ntk's routeRaster makes that call with two thresholds, the area and the bytes it would cost per edge, and the raster-gate example puts a switch on it.
+
+The table is six full repaints of a wall of 48 cells on XQuartz: always-local more than doubles the bytes on the wire; always-server sends a quarter of the bytes but makes the server rasterize every edge.
+
+The catch is that the best threshold depends on the server: on glamor, the GL-accelerated Xorg backend, trapezoids hit a software fallback that reads back from the GPU, and the XQuartz-tuned defaults can cost ten to forty times more per frame. react-x11#890 is the same lesson for clip paths: switching their coverage to PutImage took rounded marquee rows on Xwayland from 45 to 53 ms a frame down to 1.2.
+
+</Notes>
+</Slide>
+
+<Slide source="#412/#413 (XQuartz) · #794 · #690 (XQuartz) · #695 · #485 (animtree scenario)">
+
+## Same style, a different bill on every backend
+
+| Style | <O>X11 server</O> | <B>Cocoa · CoreGraphics</B> | Fix |
+| --- | --- | --- | --- |
+| **boxShadow** with blur | a picture filter, re-run on every composite: **1586 ms** for one hover | re-blurred on every fill: **130–380 ms** for a header | blur once, cache the pixels: **1.5 ms** · **4 ms** |
+| rounded **overflow** clip | a window-sized mask: **179 ms** server time per pan frame | a roundRect clip: **22 ms** | clip to the rect, keep the corners: **2.4 ms** · zoom 34 → 52 fps |
+| a few **animated** nodes | repaint their rects (bounded damage) | repaint the bitmap: **14.58 ms** flush, 108% CPU | promote to CALayers: **0.91 ms**, 54% CPU |
+
+Request counts, bytes and pixels on screen were identical before and after the blur fix. Only a metric for **convolved** pixels saw it.
+
+<Notes>
+
+Same JSX, three very different bills. A blurred box shadow: on X11 it was once left as a convolution filter on the cached picture, which the server re-applies on every composite that reads it, so hovering one card cost 1.6 seconds on XQuartz; baking the blur into the cached pixels made it 1.5 ms. CoreGraphics has the same trap in a different place: it re-blurs a shadow on every fill, and a page header's inset shadow cost 130 to 380 ms until it was drawn from a shared, pre-blurred tile.
+
+Rounded clips: on X11 a non-rectangular clip becomes a window-sized alpha mask per frame; on Cocoa a roundRect clip pushes CoreGraphics off its fast path. The fix in both is to clip to the rectangle and repair the four corners by reading them back.
+
+Animation is where Cocoa can do something X11 cannot: lift the few moving nodes onto their own Core Animation layers so the bitmap under them is not repainted at all.
+
+The quiet lesson at the bottom: the blur regression was invisible to every metric the bench had. That is why it now counts convolved pixels.
+
+</Notes>
+</Slide>
+
+<Slide source="npm run bench: requests, bytes, composites, Mpx and convolved Mpx, per scenario, against a baseline">
+
+## Measure pixels, not requests
+
+<Cols template="1fr 680px" gap={48}>
+<Col>
+
+One wheel notch on a 50,000-row table. The only change: how ntk intersects clips.
+
+|                 | ntk 3.10.0 |          3.10.1 |
+| --------------- | ---------: | --------------: |
+| requests        |       2542 |            1242 |
+| Composite calls |        242 |              25 |
+| Composite Mpx   |      153.8 | **<O>2.1</O>** |
+
+Each clip had allocated, rasterized and composited a full-window mask.
+
+</Col>
+<Col>
+
+<Card title="Requests that cost nothing">
+
+379 clip-rectangle requests per notch, 37% of all traffic. Deleting every one: 681 ms either way.
+
+</Card>
+
+<Card title="Pixels that cost everything">
+
+A blurred boxShadow stored as a picture filter: same requests, same bytes, same pixels, ~700× slower on a real display.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Two lessons from profiling that apply to any renderer that talks to a server, a GPU or a compositor. First: request count is not cost. ntk brackets every glyph run under a clip with a pair of SetPictureClipRectangles; that was 379 requests a notch and 37 percent of all traffic, and deleting all of them changed frame time by exactly nothing, because they are 8-byte requests with no pixel work behind them.
+
+What did matter was the area the server composites: an old clip intersection that built a full-window a8 mask per nested clip. Fixing it upstream took one notch from 154 megapixels of composite work to 2.
+
+Second: even area is not enough. A blurred box shadow set as a filter on a cached picture is re-convolved by the server on every composite that reads it, so the same request over the same rectangle can cost one tap per pixel or thousands. Every other metric was identical across that fix, which is why the bench now also reports convolved pixels.
+
+</Notes>
+</Slide>
+
+<Slide source="ntk#50 (lib/events_map.js) · ntk#331 · react-x11#657">
+
+## Merge what the next frame would overwrite
+
+<Cols template="1fr 680px" gap={48}>
+<Col>
+
+While a frame is pending, events merge instead of queueing:
+
+<table className="mono-first">
+  <thead>
+    <tr><th>Event</th><th>While a frame is pending</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>mousemove, resize</td><td>keep the last</td></tr>
+    <tr><td>expose, damage</td><td>take the union</td></tr>
+    <tr><td>wheel</td><td>add the deltas</td></tr>
+    <tr><td>press, key</td><td>never merged; flush what's held first</td></tr>
+  </tbody>
+</table>
+
+The merged ones stay readable in `ev.coalesced`, like the DOM's getCoalescedEvents().
+
+</Col>
+<Col>
+
+<Card title="Ask, don't subscribe">
+
+Motion hints plus one QueryPointer per frame. 600 moves: **21.9 → 8.4 KB** from the server, and handlers see as many events (88 vs 84).
+
+</Card>
+
+<Card title="Fewer renders, fresher pixels">
+
+win32, 1 kHz mouse box-selecting 300 nodes: **331 → 36** selection renders, and the position on screen is **11.9 → 4.9 ms** old.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Section two: the UI only has to be eventually consistent. Between two frames, ten mouse moves are worth exactly one: the last. So ntk keeps a coalescing table. Position-like events keep the newest, region-like events union, wheel deltas add up so no scroll distance is lost, and discrete events (presses, keys) are never merged and flush anything held before them, so ordering is preserved where it matters.
+
+The older events are not destroyed: a drawing app can read the full path from ev.coalesced, like getCoalescedEvents on the web.
+
+Two measurements. On X11, asking for motion with PointerMotionHint and polling once per frame cut the bytes from the server by 60% while delivering as many events to handlers. On win32, holding motion until the next frame turned 331 selection renders of a box-select on a 1 kHz mouse into 36, and the counter-intuitive part: the pointer position on screen got fresher, 11.9 ms old down to 4.9, because the frames stopped queueing behind stale renders.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source="ntk#50 (fence) · ntk#220 (Present clock) · ntk#370 (via a latency proxy) · react-x11#153 · ntk#195">
+
+## Slow display: fewer frames, never a queue
+
+<Cols template="1fr 600px" gap={48}>
+<Col>
+
+After each frame, ntk sends a **fence**: one round trip. The next frame waits for its reply, so the server's speed becomes our frame rate.
+
+Where the server has Present, the clock is the display itself. A window nobody can see drops to about 1 fps instead of 56 (Mutter).
+
+| Network round trip | 1 frame in flight |         2 in flight |
+| ------------------ | ----------------: | ------------------: |
+| 10 ms              |         69–71 fps | <B>99–100 fps</B> |
+| 40 ms              |         22–23 fps |  <B>44–47 fps</B> |
+
+</Col>
+<Col>
+
+<Card title="First input now, the rest folded">
+
+Ten wheel notches: the first paints immediately, the other nine fold into one catch-up frame.
+
+</Card>
+
+<Card title="A burst of discrete events">
+
+~450 events in a second: <O>449 → 61</O> blits, with the first still out in under 1 ms.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+The second half of eventual consistency is backpressure. If a renderer produces frames faster than the display consumes them, they queue, and the user watches a replay of the past. ntk ends every frame with a fence, a cheap request whose reply proves the server has processed everything before it, and the next frame waits for that reply. On a slow server or a slow network you get fewer, bigger frames that are always current.
+
+Where the server supports the Present extension the clock is the display's own completion events, which also means a window nobody can see stops drawing.
+
+One fence in flight halves the frame rate on a laggy link, so ntk#370 allows two: through a proxy adding 10 ms, 70 to 100 fps; at 40 ms, 22 to 45.
+
+Discrete input gets special treatment on top: the first wheel notch paints from its own handler, and the following ones fold into one catch-up frame; a flood of 450 key events in a second goes out as 61 blits.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" source={'react-x11#632 (issue #631) · #444, #450 · AGENTS.md "A display period is a fraction"'}>
+
+## A frame-rate plateau is a scheduler bug
+
+<Cols template="1fr 600px" gap={48}>
+<Col gap={20}>
+
+{'<glarea>'} on a 120 Hz panel, by synthetic draw cost:
+
+| draw cost |   before |               after |
+| --------- | -------: | ------------------: |
+| ~0 ms     | 67.2 fps | <B>119.7 fps</B> |
+| 3 ms      | 59.8 fps | <B>119.6 fps</B> |
+| 10 ms     | 52.0 fps |  <B>92.4 fps</B> |
+
+Two gates, each one period long, in series: a frame landed two periods later. On a 75 Hz monitor, a frame timer between 8 ms pump ticks took 56.3 → 70.4 fps.
+
+</Col>
+<Card tone="orange" title="The rules">
+
+**Round a frame wait up.** 120 Hz is 8.333 ms; a timer of 8 fires before the gate it was armed for.
+
+**Anchor to the last slot**, not to when the frame ran, so rounding never drifts.
+
+**One grid.** An extra hold asks the clock for its next slot instead of starting its own timer.
+
+**The tell:** two workloads, one frame rate. A p50 of exactly two periods is not a cost.
+
+</Card>
+</Cols>
+
+<Notes>
+
+The last lesson is about measuring frame rate at all. When two quite different workloads report the same frame rate, the work is not what limits you; the scheduler is. A glarea on a 120 Hz MacBook ran at 60 to 67 fps whether a frame cost nothing or 3 ms. The cause was two gates in series, a swap gate armed with a timer for one period after the swap and the window's frame clock, each honest on its own, and together landing every frame on the second refresh. Phase-locking the swap gate to the window clock's next slot took it to 120 fps, and the 10 ms row shows what a real cost curve looks like afterwards.
+
+The same family of bug turned a 75 Hz monitor into 62.5 or 56 fps through an 8 ms pump. The rules that came out of three of these: always round a frame wait up, because a refresh period is a fraction and setTimeout counts whole milliseconds; anchor the next slot to the previous slot so rounding does not accumulate; and when something must hold a frame back on top of a clock, express it on that clock's grid.
+
+And before reading a profile, compare the median frame gap with the display period: exactly two periods means a scheduling bug. One more from the map PRD: a run that came in at 60 instead of 75 fps looked like a cost, until a control run showed the display had changed its rate.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" footer={false} gap={48}>
+
+## Five things to take home
+
+<Col gap={28}>
+
+<Numbered n="1" size="lg">
+
+Read the host config by **phase**, not by name. Render callbacks can be thrown away.
+
+</Numbered>
+
+<Numbered n="2" size="lg">
+
+Create real resources in the commit, and walk the new subtree yourself: appendChild only reaches its root.
+
+</Numbered>
+
+<Numbered n="3" size="lg">
+
+Priority is something the host reports. Wrap your event dispatch, and answer discrete input before the next frame.
+
+</Numbered>
+
+<Numbered n="4" size="lg">
+
+Every change names what it touched. Repaint only that, and let a back buffer answer the outside world.
+
+</Numbered>
+
+<Numbered n="5" size="lg">
+
+Fast is mostly less: ship the cheapest form, draw only the newest state, and spend detail before frame rate.
+
+</Numbered>
+
+</Col>
+
+<Notes>
+
+Recap. One: the host config makes sense once you sort it by phase; anything in the render phase may run with no visible result. Two: side effects belong in the commit, and because React only calls appendChild for the root of a new subtree, your commit-phase entry point has to walk the subtree itself.
+
+Three: React learns how urgent an update is from the host, through resolveUpdatePriority; a custom renderer has to set that around its own event dispatch, and can go further by flushing and painting discrete input immediately.
+
+Four: on the output side, a retained renderer earns its keep by knowing exactly what changed; and with a back buffer, external damage is a copy rather than a redraw.
+
+Five: most of the big performance wins were not faster code but less work: commands or pixels chosen per platform, intermediate states merged away, and a budget that gives up detail while the user is moving and restores it when they stop.
+
+</Notes>
+</Slide>

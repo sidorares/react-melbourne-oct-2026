@@ -1,4 +1,4 @@
-export const section = 'Intro';
+export const section = "Intro";
 
 <Slide theme="dark" layout="statement" bar>
 
@@ -6,7 +6,7 @@ export const section = 'Intro';
 
 # React without the DOM
 
-<Lead>How react-x11 turns a reconciler, a layout engine and the X11 protocol into desktop apps</Lead>
+<Lead>react-x11: from a 2015 gif to a desktop UI toolkit</Lead>
 
 <Spacer />
 
@@ -14,11 +14,112 @@ export const section = 'Intro';
 
 <Notes>
 
-Opening. This talk is about what a custom React renderer actually does, using react-x11 as the worked example. react-x11 renders React to native desktop windows: X11 on Linux (and over the network), Cocoa on macOS, win32 and Wayland.
+About two minutes for the intro: what react-x11 is now, then what to expect. History; what a UI toolkit actually is, in three layers; building something together, live; how it works under the hood, mostly through performance; lessons learned.
 
-Live demos happen here, before any more slides.
+One reveal is held back for later: these slides are not running in Chrome.
 
-Then two halves: first the React side (the reconciler contract, render vs commit, priorities), then the renderer side (which elements become native windows, which are painted, and how we decide what to repaint).
+</Notes>
+</Slide>
+
+<Slide gap={48} source="screenshot: examples/tasks.jsx, rendered headlessly into an in-process X server">
+
+## React, rendered to native windows
+
+<Cols template="1fr 600px" gap={64} align="stretch">
+<Col gap={32}>
+
+- Same React, same hooks. The host elements are **{'<window>'}**, **{'<box>'}**, **{'<text>'}**, **{'<image>'}**, **{'<canvas>'}**, **{'<textinput>'}**…
+- Four backends: X11 (pure-JS protocol, works over the network), Cocoa, win32, Wayland
+- Plus **@react-x11/components**: editors, terminal, maps, charts… an HTML engine
+- No DOM, no browser, no Electron
+
+```jsx
+<window title="counter" width={240} height={120}>
+  <box style={{ padding: 8, ':hover': {…} }}
+       onClick={() => setN(n + 1)}>
+    <text>+1</text>
+  </box>
+</window>
+const root = await createRoot(); root.render(<Counter />);
+```
+
+</Col>
+<Col justify="center" style={{ alignItems: 'center', background: 'var(--sand)', borderRadius: 16, padding: 24 }}>
+
+<Shot src="img/tasks.png" alt="The react-x11 tasks example: a task list with a text input, filter buttons and checkboxes" width={546} height={520} />
+
+</Col>
+</Cols>
+
+<Notes>
+
+react-x11 is a renderer in the same sense react-dom and react-native are: React itself is unchanged, and what differs is what the host elements turn into. Here they are windows and painted boxes rather than DOM nodes.
+
+The X11 backend speaks the protocol in pure JavaScript (node-x11), so an app can run on one machine and display on another, which is the flagship reason the project exists. Cocoa and win32 are the defaults on macOS and Windows.
+
+The screenshot is the tasks example, rendered by the real renderer into node-x11's in-process X server (that is how the docs screenshots are generated, and how the tests run without a display).
+
+</Notes>
+</Slide>
+
+<Slide gap={48}>
+
+## Today
+
+<Col gap={24}>
+
+<Numbered n="1" size="lg">
+
+**History**: a 2015 gif, nine quiet years, three busy months
+
+</Numbered>
+
+<Numbered n="2" size="lg">
+
+**What is in a UI toolkit**: what you see, the desktop around it, the big components on top
+
+</Numbered>
+
+<Numbered n="3" size="lg">
+
+**Let's build together**: from an empty file, live
+
+</Numbered>
+
+<Numbered n="4" size="lg">
+
+**Under the hood**: and why performance is a feature
+
+</Numbered>
+
+<Numbered n="5" size="lg">
+
+**Lessons learned**
+
+</Numbered>
+
+</Col>
+
+<Notes>
+
+Set expectations: a lot of breadth, a few live demos, one joke slide in the middle.
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={48}>
+
+# An experiment
+
+<Lead>What should I build in one shot, while I talk?</Lead>
+
+<Small style={{ fontSize: 30 }}>An agent starts now with your idea, react-x11 and its components. We look at what it made at the very end.</Small>
+
+<Notes>
+
+Take the first idea that is a desktop app and not a website. Start it from the deck repo's oneshot/ folder (oneshot/README.md has the exact command and the prompt template). The folder's AGENTS.md tells the agent what react-x11 and @react-x11/components are, and DESIGN.md how a Mac app should look.
+
+Leave it running on the laptop, out of the projected screen. Check back on the last slide before Thanks.
 
 </Notes>
 </Slide>
