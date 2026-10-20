@@ -17,7 +17,9 @@
 // whose rows are commands (the table comes from there), `@` a list of
 // people. What draws it is this package's view, one `<richeditortext>` per
 // textblock, so a keystroke re-renders the paragraph it lands in. The pane
-// on the right is `onChange`'s markdown: what an app would save.
+// on the right is `onChange`'s markdown: what an app would save, in a
+// `<Code>` block highlighted by highlight.js's markdown grammar through
+// the package's `hljsLanguage` adapter.
 import { useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { XK_RETURN, XK_TAB } from 'react-x11/keysyms';
@@ -39,6 +41,10 @@ import type {
   Suggester,
   SuggestionItem,
 } from '@react-x11/components/rich-text-editor';
+import { Code } from '@react-x11/components/code';
+import { hljsLanguage } from '@react-x11/components/code-language';
+import hljs from 'highlight.js/lib/core';
+import markdownGrammar from 'highlight.js/lib/languages/markdown';
 import { easeInOutCubic, lerp, progress, useTick } from '../clock.js';
 import type { SceneProps } from '../scene.js';
 import { findScroller } from '../scroll.js';
@@ -100,6 +106,11 @@ TODO: decide what the trailer leaves out.
 
 ---
 `;
+
+hljs.registerLanguage('markdown', markdownGrammar);
+/** Markdown, tokenized by highlight.js: no tokenizer for it ships with the
+ *  package, and its adapter turns any of highlight.js's grammars into one. */
+const MARKDOWN = hljsLanguage({ hljs, name: 'markdown' }) ?? undefined;
 
 /** A ProseMirror plugin, unchanged from what a browser editor would run:
  *  every TODO, decorated. */
@@ -337,18 +348,6 @@ function steps(get: () => RichTextEditorHandle | null, stage: Stage): Step[] {
   ];
 }
 
-/** The last `lines` lines of `text`. */
-const tail = (text: string, lines: number): string => {
-  const all = text.split('\n');
-  return all.length > lines ? `…\n${all.slice(-lines).join('\n')}` : text;
-};
-
-/** The first `lines` lines of `text`. */
-const head = (text: string, lines: number): string => {
-  const all = text.split('\n');
-  return all.length > lines ? `${all.slice(0, lines).join('\n')}\n…` : text;
-};
-
 /** When the script starts: the editor on screen, the card gone. */
 const SCRIPT_AT = 200;
 
@@ -361,7 +360,12 @@ export function RichTextScene({
   const box = useRef(null);
   const pane = useRef<Scroller | null>(null);
   const [saved, setSaved] = useState(START);
-  const [atEnd, setAtEnd] = useState(false);
+  // the saved-markdown pane: kept at the top while the edits are up
+  // there, then following the end as the typing does
+  const savedBox = useRef(null);
+  const savedPane = useRef<Scroller | null>(null);
+  const following = useRef(false);
+  const followed = useRef(0);
   const plugins = useMemo(() => [todoPlugin()], []);
   // the glide under way, in show ms, and the clock it is read against
   const glide = useRef<{
@@ -394,7 +398,9 @@ export function RichTextScene({
               ms,
             };
           },
-          followEnd: () => setAtEnd(true),
+          followEnd: () => {
+            following.current = true;
+          },
         }),
         (text) => {
           // a key at a time, as typed: an input rule sees each one
@@ -405,7 +411,7 @@ export function RichTextScene({
     [],
   );
 
-  useTick(active, start, (t) => {
+  useTick(active, start, (t, dt) => {
     now.current = t;
     script.tick(t);
     const g = glide.current;
@@ -415,6 +421,14 @@ export function RichTextScene({
       p.scrollTo({ y: Math.round(lerp(g.from, g.to, k)) });
       // let go at the end, so the editor's own scrolling has the pane back
       if (k >= 1) glide.current = null;
+    }
+    // the saved markdown eases after its end, as a chat pane does
+    const sp = (savedPane.current ??= findScroller(savedBox.current));
+    if (sp) {
+      const target = following.current ? sp.room() : 0;
+      followed.current += (target - followed.current) * Math.min(1, dt / 120);
+      if (Math.abs(target - followed.current) < 0.5) followed.current = target;
+      sp.scrollTo({ y: Math.round(followed.current) });
     }
   });
 
@@ -454,17 +468,19 @@ export function RichTextScene({
         <text style={{ fontSize: 14, color: MUTED }}>
           onChange · the markdown an app would save
         </text>
-        <box style={{ flexGrow: 1, minHeight: 0, overflow: 'hidden' }}>
-          <text
-            style={{
-              fontFamily: '$monoFamily',
-              fontSize: 15,
-              color: '#9aa7c4',
-            }}
-          >
-            {/* the part of it being edited: the top, then the end */}
-            {(atEnd ? tail : head)(saved, Math.floor((height - 80) / 22))}
-          </text>
+        <box
+          ref={savedBox}
+          // sized in numbers: the pane's own padding, caption and gap off
+          style={{ height: height - 62, overflow: 'scroll' }}
+        >
+          <Code
+            source={saved}
+            language={MARKDOWN}
+            wrap
+            selectable={false}
+            fontSize={15}
+            style={{ backgroundColor: 'transparent' }}
+          />
         </box>
       </box>
     </box>
