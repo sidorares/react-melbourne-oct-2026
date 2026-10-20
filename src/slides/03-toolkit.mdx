@@ -1,0 +1,226 @@
+export const section = "What is a UI toolkit";
+
+<Slide gap={40}>
+
+<Eyebrow>Layer 1 · what we see most of the time</Eyebrow>
+
+## What is a UI toolkit?
+
+<Grid cols={3} gap={24}>
+
+<Card title="Windows and dialogs">
+
+title, size hints, modality, sheets
+
+</Card>
+
+<Card title="Menus and popups">
+
+menu bars, context menus, tooltips
+
+</Card>
+
+<Card title="Buttons, radios, checkboxes">
+
+and the hover and press states of each
+
+</Card>
+
+<Card title="Dropdowns and text inputs">
+
+selection, carets, undo, IME
+
+</Card>
+
+<Card title="Images">
+
+PNG, JPEG, WebP, GIF, SVG
+
+</Card>
+
+<Card variant="top" tone="orange" title="2D and 3D escape hatches">
+
+`<canvas>` and `<glarea>`: arbitrary graphics when the widgets run out
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+This is what most people mean by "toolkit", and it looks like a weekend. The next two slides are why it isn't.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="ntk's text stack: fontkit shaping, bidi-js, its own line breaker · four engines, one layout contract">
+
+<Eyebrow>That is already a lot</Eyebrow>
+
+## Font rendering is worth its own talk
+
+<Grid cols={4} gap={24}>
+
+<Card variant="top" tone="blue" title="Finding a font">
+
+name matching, TTF / OTF / WOFF2, missing-glyph substitution
+
+</Card>
+
+<Card variant="top" tone="blue" title="Shaping">
+
+kerning, complex scripts, variable axes, features
+
+</Card>
+
+<Card variant="top" tone="orange" title="Direction">
+
+bidi, right-to-left, vertical scripts
+
+</Card>
+
+<Card variant="top" tone="orange" title="Paragraphs">
+
+line breaking, hyphenation, carets, selection
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+Every card here was a bug report at some point. A favourite: on macOS, "sans-serif" through Homebrew's fontconfig resolves to a CJK font whose Cyrillic sits on full-width advances. Easy to miss until someone types Russian.
+
+The next slide is one of these in detail: shaping. Text comes back in the performance part: glyphs uploaded once, a word drawn with 52 bytes.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="fontkit shapers: Arabic, Indic, Hangul, USE · samples drawn here by your browser, not by ntk">
+
+## Shaping: characters in, positioned glyphs out
+
+<table className="big">
+<thead>
+<tr><th style={{ width: '22%' }}>Characters</th><th style={{ width: '14%' }}>Drawn</th><th>What the shaper did</th></tr>
+</thead>
+<tbody>
+<tr><td style={{ fontSize: 36 }}>f + i</td><td style={{ fontSize: 36 }}>ﬁ</td><td>one glyph for two characters: a ligature (GSUB)</td></tr>
+<tr><td style={{ fontSize: 36 }}>T + y</td><td style={{ fontSize: 36 }}>Ty</td><td>pair kerning (GPOS): T's advance 19.55 → 17.78 px in Arial 32</td></tr>
+<tr><td style={{ fontSize: 36 }}>س + ل + ا + م</td><td style={{ fontSize: 36 }}>سلام</td><td>Arabic: each letter takes its initial, medial or final form, right to left</td></tr>
+<tr><td style={{ fontSize: 36 }}>क + ि</td><td style={{ fontSize: 36 }}>कि</td><td>Devanagari: the vowel sign typed after the consonant is drawn before it</td></tr>
+<tr><td style={{ fontSize: 36 }}>e + ◌́</td><td style={{ fontSize: 36 }}>é</td><td>a combining mark anchored onto its base (GPOS mark-to-base)</td></tr>
+</tbody>
+</table>
+
+<Grid cols={2} gap={32}>
+<Card variant="rule" tone="blue" title="Why a UI cares">
+
+Glyphs ≠ characters. Width, caret stops and selection must come from shaped clusters, never from string length.
+
+</Card>
+<Card variant="rule" tone="orange" title="Known gaps">
+
+No dictionary breaking for Thai, Lao, Khmer: runs cut at graphemes. No IME on X11 yet (#272).
+
+</Card>
+</Grid>
+
+<Notes>
+
+Shaping is the step people forget exists until it breaks. The input is a sequence of Unicode characters, the output a sequence of glyph ids with advances and offsets, and the two are not one to one. A ligature turns two characters into one glyph. Kerning keeps the glyphs but moves them: in Arial at 32 px the T in front of a y advances 17.78 px instead of 19.55. Arabic letters change shape depending on whether they join on either side, and the run is laid out right to left. Devanagari reorders: the short i vowel sign is stored after the consonant but drawn in front of it. Combining marks are positioned onto their base by anchors in the font.
+
+ntk gets all of this from fontkit's script shapers, Arabic, Indic, Hangul and the Universal Shaping Engine, and checked its faster mark lookups against fontkit's own output over 2,113 faces.
+
+For a UI toolkit the consequence is that anything counting characters is wrong: caret positions, hit testing, selection and measurement all have to come from shaped clusters.
+
+The honest gaps: line breaking for scripts without spaces, Thai, Lao, Khmer, needs a dictionary ntk does not have, and there is no input method support on X11 yet. Note the samples on this slide are rendered by the presentation, not by ntk.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="yoga for flexbox · src/grid.js, held to Chrome by test/grid-conformance.test.js · custom layouts: docs/architecture/custom-layout.md">
+
+## …and layout, and focus
+
+<Grid cols={2} gap={40}>
+
+<Card variant="top" tone="blue" label="Some sort of layout engine" title="Layout">
+
+- absolute positioning
+- **flexbox** on yoga, plus the min-content floors CSS has and yoga does not
+- **grid**, checked against what Chrome lays out
+- constraint layouts, Cassowary style, through a custom layout seam
+
+</Card>
+
+<Card variant="top" tone="orange" label="Where the keys go" title="Focus">
+
+- Tab order and focus rings
+- popups that hand focus back
+- shortcuts that survive a keyboard layout switch
+- what a screen reader thinks is focused
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+Content floors: yoga defaults flexShrink to 0 and has no min-content size. With 0, a row never squeezes into the space it has. With 1, everything collapses to nothing and scrolling stops existing. CSS has both halves, so the renderer measures the missing one.
+
+Grid is in core. Its conformance test is a corpus Chrome laid out once.
+
+</Notes>
+</Slide>
+
+<Slide gap={40}>
+
+## Then: the developer experience
+
+<Grid cols={3} gap={24}>
+
+<Card title="Testing">
+
+`react-x11/test`: Testing Library style, headless, against an X server in the same process
+
+</Card>
+
+<Card title="Profiling">
+
+`REACT_X11_TRACE`, damage flashing, `npm run bench`, Perfetto traces
+
+</Card>
+
+<Card title="Hot reload">
+
+React Fast Refresh: edit, save, state survives
+
+</Card>
+
+<Card title="Click to component">
+
+⌥-click anything and your editor opens at the JSX line
+
+</Card>
+
+<Card title="Inspectors / DevTools">
+
+React DevTools, with hover highlight in the real window
+
+</Card>
+
+<Card title="Types">
+
+hand-written `.d.ts`: a typo in a style key is an error
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+This is the part that decides whether anyone uses it. The next few slides are the demo.
+
+</Notes>
+</Slide>

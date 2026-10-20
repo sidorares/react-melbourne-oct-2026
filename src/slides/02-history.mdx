@@ -1,0 +1,145 @@
+export const section = "History";
+
+<Slide gap={28} source="first commit 2015-11-11 · the README gif landed with c2050a5, April 2017">
+
+## How it started
+
+<Shot src="img/prototype-2015.gif" alt="The 2015 react-x11 prototype: React components rendered as X11 windows" width={1180} height={692} style={{ alignSelf: 'center' }} />
+
+<Small>Every element a real X window, created bottom-up. Commit [c2050a5](https://github.com/sidorares/react-x11/commit/c2050a523dc9c86e8c6dc1c9da6ecc22063b00fd) · [github.com/sidorares/react-x11](https://github.com/sidorares/react-x11)</Small>
+
+<Notes>
+
+November 2015: React's model with X11 windows as the host components. Every element was a real X window: a box was a window, text was drawn into a window. That works for a demo gif and does not scale to a UI.
+
+The gif is from the README as of April 2017, which is roughly where the project stopped.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="X10 1984 at MIT · X11 since 1987 · node-x11, ntk: github.com/sidorares">
+
+## X11 in one slide
+
+<Grid cols={2} gap={40}>
+
+<Card variant="top" tone="blue" label="X client" title="Your app">
+
+Sends requests over a socket: create a window, draw this, upload these glyphs. Gets events back: key, pointer, expose.
+
+</Card>
+
+<Card variant="top" tone="orange" label="X server" title="The display">
+
+Owns the screen, the keyboard and the mouse. Draws what it is told. Can be **another machine**.
+
+</Card>
+
+</Grid>
+
+- Network transparent: `ssh -X` and the window shows up on your laptop
+- **node-x11**: the X11 wire protocol in pure JavaScript. No libX11, no native code
+- **ntk**: the toolkit layer on top: windows, a canvas-like 2D context over XRender, fonts
+
+<Notes>
+
+Keep it to a minute. The point to land: your app is a network client of the display, even on a local socket. That is why every round trip and every byte is a cost, which comes back in the performance part.
+
+Remote display is also why X11 is still the default backend on Linux, even with Wayland supported.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="issue #4 opened 2017-03-31, closed 2026-07-26 · commits on master, squash-merged PRs">
+
+## Evolution
+
+<Grid cols={3} gap={32}>
+
+<Card variant="top" tone="muted" label="2015" title="Super rough prototype">
+
+The gif. Every element a window
+
+</Card>
+
+<Step>
+
+<Card variant="top" tone="blue" label="2017" title="Issue #4">
+
+[github.com/sidorares/react-x11/issues/4](https://github.com/sidorares/react-x11/issues/4): "Investigate ways to perform top-down rendering instead of bottom-up". Then nothing, for nine years
+
+</Card>
+
+</Step>
+
+<Step>
+
+<Card variant="top" tone="orange" label="July 2026" title="#4 solved">
+
+Windows created **top-down, in the commit**. Then rapid iterations:
+
+</Card>
+
+</Step>
+
+</Grid>
+
+<Step>
+
+<Grid cols={4} gap={24}>
+<Stat value="111" label="commits in July" tone="blue" />
+<Stat value="204" label="August" tone="blue" />
+<Stat value="301" label="September" />
+<Stat value="150" label="October, so far" />
+</Grid>
+
+</Step>
+
+<Notes>
+
+Issue #4: windows were created bottom-up, children before their parents, so everything had to be reparented and staged. The fix was to make no display calls in render at all, and to create windows top-down in the commit phase, each one naming its real parent from the start. Closed 26 July 2026.
+
+After that it went fast. Each commit on master is a squash-merged PR, so the bars are roughly PRs per month.
+
+Next slide: it works!
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" footer={false} gap={0}>
+
+<Shot src="img/exist-then-good.png" alt="Rocket engines. Top, with exposed plumbing: just make it exist first. Bottom, clean: you can make it good later." width={760} height={950} style={{ alignSelf: 'center' }} />
+
+<Notes>
+
+Let it land, then: "it works!". Raptor 1 on top, Raptor 3 below: same engine, years apart.
+
+That was react-x11 in July: it existed. Everything since was the "make it good" part.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" gap={40}>
+
+<Eyebrow tone="orange">Demo</Eyebrow>
+
+# Make it actually good
+
+<Code size={34}>
+
+```bash
+cd demo && npm start
+```
+
+</Code>
+
+<Small>Every component in one native window, driven by a script. Nothing recorded.</Small>
+
+<Notes>
+
+The stress-demo trailer in demo/: a code editor edited mid-file, a million-row table, rich text, a kanban dragged about, a vector map flight, a flow graph re-wired, charts, markdown streamed, an HTML magazine, video, 3D, a terminal flood, then six scenes at once.
+
+It waits on the title card until Start, or Return, Space, → or Page Down, so the clicker drives it. Run `npm run prefetch` beforehand so the map tiles and the video clip are local. `--only=map,flow` plays a subset if time is short.
+
+</Notes>
+</Slide>

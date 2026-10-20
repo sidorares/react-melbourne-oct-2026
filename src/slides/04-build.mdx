@@ -1,4 +1,4 @@
-export const section = 'Try it';
+export const section = "Let’s build together";
 
 <Slide source="examples/README.md · website: Getting started">
 
@@ -250,6 +250,63 @@ Step three is a tiny to-do list, the classic. A controlled textinput: value come
 Everything a native text field should do comes for free: caret and selection with the mouse, double-click to select a word, undo and redo, copy and paste through the system clipboard, a right-click edit menu. The list is plain React: map over an array and render a text per item.
 
 Things to try once it runs: type something and press Enter; drag-select inside the field; resize the window and watch flexbox reflow; and on Linux, run it over ssh -X from another machine.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="react-x11's bin: src/cli/ · docs/click-to-component.md · docs/devtools.md">
+
+## Live: `react-x11 dev`
+
+<Cols template="1fr 1fr" gap={56} align="start">
+<Col>
+
+<Code size={30}>
+
+```bash
+npx react-devtools
+npx react-x11 dev app.jsx
+```
+
+</Code>
+
+<Small>Either order. `REACT_X11_DEVTOOLS=0` turns DevTools off.</Small>
+
+</Col>
+<Col gap={20}>
+
+<Numbered n="1">
+
+No config: one file, a default export, and it mounts
+
+</Numbered>
+
+<Numbered n="2">
+
+Save and Fast Refresh runs, state kept
+
+</Numbered>
+
+<Numbered n="3">
+
+⌥-click and your editor opens at the line
+
+</Numbered>
+
+<Numbered n="4">
+
+DevTools: the tree, props, highlight in the window
+
+</Numbered>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Start from an empty app.jsx: export default () => a text saying hello. dev wraps it in a window. Add a box, a button with a :hover block, a counter. Click a few times, save an edit, and the count survives. ⌥-click the button to jump to the line. Hover a component in DevTools and it highlights in the real window.
+
+Before the talk: check the react-x11 you demo includes the dev + DevTools default, and that react-devtools-core is installed in the demo folder.
 
 </Notes>
 </Slide>

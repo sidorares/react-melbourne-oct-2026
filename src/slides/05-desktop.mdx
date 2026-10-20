@@ -1,0 +1,161 @@
+export const section = "The desktop";
+
+<Slide gap={40}>
+
+<Eyebrow>Layer 2 · the desktop around the window</Eyebrow>
+
+## What the app reads from the desktop
+
+<Grid cols={3} gap={24}>
+
+<Card title="Screen readers">
+
+AT-SPI over D-Bus, NSAccessibility, UI Automation
+
+</Card>
+
+<Card title="Monitors">
+
+arrangements, HiDPI, per-monitor scale
+
+</Card>
+
+<Card title="Appearance">
+
+dark / light, the system accent, reduced motion, more contrast
+
+</Card>
+
+<Card title="Colour picker">
+
+the system eyedropper, anywhere on screen
+
+</Card>
+
+<Card title="Calendar">
+
+the system's calendar data, in the calendar control
+
+</Card>
+
+<Card title="Dialogs">
+
+the system's open, save and print
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+Modern desktops do a lot around the window. An app that ignores it feels like a port.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="the ladder modules: notifications.js, statusnotifier.js, launcher.js, capabilities.js">
+
+## Where the app shows up outside its window
+
+<Grid cols={3} gap={24}>
+
+<Card title="Global menu">
+
+the macOS menu bar; dbusmenu on KDE and Unity
+
+</Card>
+
+<Card title="Dock icon">
+
+attention, badges, progress
+
+</Card>
+
+<Card title="Tray">
+
+icons, menus, badges, mini-UI
+
+</Card>
+
+<Card title="Drag and drop">
+
+to and from other apps: XDND, NSDragging
+
+</Card>
+
+<Card title="Deep links">
+
+URL schemes, single instance
+
+</Card>
+
+<Card title="Clipboard">
+
+copy and paste, and X11's selection buffers
+
+</Card>
+
+</Grid>
+
+<Lead>Found by **capability**, never by platform. A missing service is not an error.</Lead>
+
+<Notes>
+
+The rule underneath all of these: each feature is a ladder of mechanisms tried in order, found by a feature test. Availability is a feature set, not a boolean. A notification daemon with actions is a conversation; one without is a sign. Render the fallback first and upgrade a tick later, because downgrading something the user already reached for is worse.
+
+Next slide: one of these as code. The menu bar is an effect, not an element.
+
+</Notes>
+</Slide>
+
+<Slide source="src/globalmenu.js:555 (simplified) · Linux: com.canonical.dbusmenu; macOS: the app menu bar">
+
+## The system menu is an effect, not an element
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```jsx
+// useGlobalMenu(menus, { onSelect })
+const live = useRef();
+live.current = { menus, onSelect };
+const exportRef = useRef(null);
+
+useEffect(() => {
+  const owner = app.createGlobalMenuExport
+    ? app.createGlobalMenuExport(config) // NSMenu
+    : new GlobalMenuExport(config); // D-Bus
+  exportRef.current = owner;
+  owner.start();
+  return () => owner.stop();
+}, [enabled, target, app]);
+
+useEffect(() => {
+  exportRef.current?.update(menus);
+}, [menus]);
+```
+
+</Col>
+<Col gap={24}>
+
+It lives outside the window tree, so there is no host node to hang it on.
+
+Effects run after a commit, never for a discarded render, and always get their cleanup.
+
+Handlers are read through a ref **at call time**: a click on the panel minutes later runs the current render's handler.
+
+Tray, notifications and launcher menus follow the same shape.
+
+</Col>
+</Cols>
+
+<Notes>
+
+What does "create a system menu" become? Not a host element: the global menu is a hook. Its effect creates an export owner when the component mounts and stops it on cleanup. On macOS the Cocoa backend owns the real menu bar and answers immediately; on Linux it is a D-Bus dbusmenu export registered with the panel's registrar. Updates go through a second effect so a menu change does not tear down the export.
+
+The ref pattern is the important React detail: the D-Bus reply for a click can arrive long after the export was created, so the callbacks given to the owner read live.current at call time instead of closing over the props of the render that created them.
+
+Trays, notifications and the launcher menu follow the same pattern: an effect, a capability probe, and a fallback when the desktop has no such service, which is not an error.
+
+</Notes>
+</Slide>

@@ -1,0 +1,10 @@
+Build this as a native macOS desktop app: <AUDIENCE IDEA>.
+Follow AGENTS.md and DESIGN.md in this folder exactly. Work fully unattended:
+don't ask me anything, make sensible product decisions and note them in
+app/NOTES.md. Use react-x11 and @react-x11/components only (no DOM, no
+Electron). Prioritise a working, good-looking core experience over breadth,
+with realistic sample data, a proper menu bar with shortcuts, and correct
+light and dark mode. Verify by running the tests and by looking at
+screenshots, fix what looks off, and finish with `cd app && npm start`
+opening the app and app/README.md explaining it. Aim to be done in about
+40 minutes.

@@ -1,0 +1,652 @@
+export const section = "Performance";
+
+<Slide theme="dark" layout="statement" gap={48}>
+
+# Performance is a feature
+
+<Grid cols={2} gap={48}>
+
+<Card variant="line" tone="orange" title="Hard to go back">
+
+Once you have tried 120 fps, 10 fps feels broken
+
+</Card>
+
+<Card variant="line" tone="blue" title="It doesn't come on its own">
+
+You build it, measure it and defend it, one PR at a time
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+The metric is perceived latency, measured from the input rather than from the work. Every input gets a visible answer on the event that started it. A switch that toggles on release and shows nothing on the press reads as slow, even when nothing is slow.
+
+</Notes>
+</Slide>
+
+<Slide gap={40}>
+
+## How? Game developers know
+
+<Col gap={24}>
+
+<Step><Numbered n="1" size="lg">
+
+Don't do work that will be **discarded**
+
+</Numbered></Step>
+
+<Step><Numbered n="2" size="lg">
+
+**Cheat**: set budgets, and simplify when over them
+
+</Numbered></Step>
+
+<Step><Numbered n="3" size="lg">
+
+**Use the platform**: copy, don't redraw
+
+</Numbered></Step>
+
+<Step><Numbered n="4" size="lg">
+
+Don't render what nobody **sees**
+
+</Numbered></Step>
+
+</Col>
+
+<Notes>
+
+Four rules, each with slides from the deep-dive version of this talk behind it. Skip any of them if time is short. Each rule's opener is enough on its own.
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={36}>
+
+<Eyebrow>1 / 4</Eyebrow>
+
+# Don't do work that will be discarded
+
+<Lead>UIs are eventually consistent. React helps a lot here, and after React, discard whatever you know won't be used.</Lead>
+
+<Notes>
+
+First, what React already throws away for us: renders that never commit. Then what the renderer throws away on top: intermediate states, and pixels nobody needs repainted.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="react-x11 maps hideInstance to node.setHidden(true)">
+
+## Six ways a render never commits
+
+<Grid cols={3} gap={24}>
+<Card title="Interrupted">
+
+An urgent update lands mid-transition. The transition restarts after it commits.
+
+</Card>
+<Card title="Superseded">
+
+A newer transition or deferred value arrives before the first one commits.
+
+</Card>
+<Card title="Suspended">
+
+use(promise) or lazy suspends. In a transition, the old UI stays and the render is dropped.
+
+</Card>
+<Card title="Threw">
+
+React retries once, then renders the nearest error boundary instead.
+
+</Card>
+<Card title="StrictMode">
+
+In development, components render twice and effects mount, unmount, mount.
+
+</Card>
+<Card title="Pre-rendered">
+
+Hidden {'<Activity>'} and suspended siblings render work that may never be shown.
+
+</Card>
+</Grid>
+
+Content already on screen that suspends again is **hidden**, not destroyed: hideInstance / unhideInstance keep its state.
+
+<Notes>
+
+Six situations where the render phase runs and its result is never committed, or committed differently. Interrupted and superseded are the scheduling cases from the previous slide. Suspension: a component that reads a pending promise suspends; inside a transition React keeps showing the previous UI and abandons the render until the promise settles; outside one it commits the nearest Suspense fallback.
+
+Errors: React retries the render once synchronously in case the error was a race, then renders the error boundary; the first attempts are discarded. StrictMode in development renders components twice on purpose to flush out impure renders. Pre-rendering: React 19 can render hidden Activity trees and siblings of a suspended component ahead of time at low priority.
+
+The one case where existing host instances survive is the last line: if content already committed suspends again outside a transition, React hides it with hideInstance and shows the fallback, then unhides it, keeping component state. react-x11 implements that as setHidden.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="comp = react-x11-components · a11y: 37.5 fps with the bridge off">
+
+## Only the newest state is worth drawing
+
+<Grid cols={3} gap={24}>
+
+<Card title="Terminal flood">
+
+One subscription per parsed batch, not one per scrolled line.
+
+<p style={{ fontSize: 36, fontWeight: 600 }}><O>336,000 → {'<600'}</O></p>
+
+<Small>repaint claims per flood · comp#70</Small>
+
+</Card>
+
+<Card title="Pane resize">
+
+One rect in flight to the child process, always the newest.
+
+<p style={{ fontSize: 36, fontWeight: 600 }}><O>1.4–2.5 s → 39 ms</O></p>
+
+<Small>final size after the drag; 121 → 31 rects · #876</Small>
+
+</Card>
+
+<Card title="Fling a table">
+
+Rows that fly past in one frame are never mounted.
+
+<p style={{ fontSize: 36, fontWeight: 600 }}><O>16 → 39 fps</O></p>
+
+<Small>1,250 → 151 rows mounted · comp#130</Small>
+
+</Card>
+
+<Card title="Out of sight">
+
+An animation scrolled out of its pane stops looping.
+
+<p style={{ fontSize: 36, fontWeight: 600 }}><O>19% → 0.1% CPU</O></p>
+
+<Small>20 progress bars, 75 fps → 0 · #847</Small>
+
+</Card>
+
+<Card title="Accessibility tree">
+
+Pushed at most every 500 ms in a stream. A row that comes and goes in between is never exported.
+
+<Small>fling 31 → 36.8 fps · #719</Small>
+
+</Card>
+
+<Card variant="inverse" title="React has it too">
+
+<B>useDeferredValue</B> keeps a filter field live while the list behind it renders the latest query only.
+
+<Small>examples/monitor.jsx</Small>
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+The same principle one level up, in application and component code. The terminal emulator used to subscribe to every scrolled line, which was 336,000 repaint claims for a 300,000-line cat; one subscription per parsed batch is under 600, and a flood went from 3.5 s to about 1 s.
+
+A Frame pane, a child process embedded in our window, used to receive every rect of a window drag in order, so its final size arrived up to 2.5 seconds after the mouse stopped; now one rect is in flight at a time and it is always the newest, so the pane gets 31 instead of 121 and catches up in 39 ms. A fast fling through a 100,000-row table mounted 1,250 rows it showed for a single frame; trimming to the rows the frame can show took it from 16 to 39 fps.
+
+An animation nobody can see stops. The accessibility bridge pushes a stream at most twice a second, the way Chromium batches its accessibility events, and a row that scrolls in and out between pushes is simply never exported.
+
+And React's own tool for this is useDeferredValue, used in the monitor example so the filter input stays responsive while a large list catches up.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="src/nodes/damage.js · Cocoa keeps 16, its passes are cheaper">
+
+## Damage is a list of rects, not one box
+
+<DamageRects />
+
+<Grid cols={3} gap={24}>
+<Card title="Capped at 4">
+
+Each rect is a full tree walk. Over the cap, the cheapest pair merges.
+
+</Card>
+<Card title="Overlaps merge">
+
+A translucent node inside two rects would be painted twice.
+
+</Card>
+<Card title="Nearly full? One box">
+
+Rects must save 25% of their box to be painted separately.
+
+</Card>
+</Grid>
+
+<Notes>
+
+A ticker in the top-left and a status line in the bottom-right change in the same frame. A single damage box around them is nearly the whole window, so everything between them repaints. A list keeps them apart: two passes, each clipped to its own rect, each culling everything that does not reach it.
+
+The list is capped at four on X11 because each rect costs a whole extra walk of the tree plus a clip; when it overflows, the pair whose merge leaves the least area to paint is merged. Overlapping rects are always merged, not for tidiness but for correctness: a translucent node inside two rects would blend over itself. And if the rects cover most of the box around them (the threshold is 75%), the frame paints the box instead.
+
+Why clip each pass to one rectangle instead of one clip with several: ntk's server-side clip fast path only recognises a single rectangle; anything else falls back to rasterizing a full-surface mask.
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={36}>
+
+<Eyebrow>2 / 4</Eyebrow>
+
+# Cheat
+
+<Lead>Set budgets. Simplify when over the budget. Be adaptive.</Lead>
+
+<Notes>
+
+Games have always done this: level of detail, dynamic resolution. A UI can do the same: price each frame, and spend detail before frame rate.
+
+Blur story to have ready: a box-shadow blur set as a filter on its cached picture was re-run by the X server on every composite. 1.6 s per hover on XQuartz. Baked into the pixels once, it is 1.5 ms.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source={'react-x11#497, src/pacing.js · PRD: react-x11-components#69 · <window frameRate="adaptive">'}>
+
+## Price frames in CPU time: a token bucket
+
+**The bug:** a `cat` flood took 3.50 s on Cocoa, 0.85 s on XQuartz. X11's fence held it to 35 fps. Cocoa had no backpressure and painted 110 fps, 60% of the time.
+
+<Cols template="1fr 820px" gap={48}>
+<Col gap={16}>
+
+<O>■</O> Credit accrues at **budget × wall time** (adaptive: a quarter), up to a 50 ms burst.
+
+<O>■</O> A frame spends what its flush and present cost. In debt, the next waits.
+
+<O>■</O> A click or key is never held. A cheap frame never waits: a blitted scroll stays at 120 Hz.
+
+<O>■</O> Server time is never priced: the fence already paces it.
+
+</Col>
+<Col gap={12}>
+
+<table className="mono-first">
+  <thead>
+    <tr><th>frameRate</th><th align="right">fps</th><th align="right">paint</th><th align="right">CPU</th><th align="right">producer</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>'display'</td><td align="right">120</td><td align="right">58%</td><td align="right">72%</td><td align="right">244/s</td></tr>
+    <tr className="hl-orange"><td>'adaptive'</td><td align="right">36.1</td><td align="right">21%</td><td align="right">27%</td><td align="right"><b>529/s</b></td></tr>
+    <tr><td>'throughput'</td><td align="right">8.8</td><td align="right">9%</td><td align="right">13%</td><td align="right">592/s</td></tr>
+  </tbody>
+</table>
+
+<Small>A window repainting whole on a 2 ms timer. M1 Pro, 120 Hz. Painting every refresh starves the producer of half its ticks.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Section three: budgets. The motivating bug was a terminal: cat a large file and Cocoa took four times longer than XQuartz on the same Mac. On X11 the fence was quietly pacing the app to about 35 fps because the server needs time to composite a screen of glyphs. Cocoa had nothing equivalent, so it painted every refresh and spent 60% of its time painting instead of parsing.
+
+The fix, react-x11#497, is a token bucket priced in CPU time. A window earns credit at a fraction of wall time (a quarter for adaptive), each frame spends what its flush and present actually cost, and a claim made while in debt waits. Three rules keep it from making the app feel slower: discrete input is never held, cheap frames never wait, so a blitted scroll still runs at 120 Hz, and the X server's own time is never charged, because the fence already accounts for it.
+
+The table is a synthetic stream that repaints the whole window on a 2 ms timer: at the default it paints 120 frames a second and the producer gets half its ticks; adaptive paints 36 frames and the producer gets all of them, at about a third of the CPU.
+
+It is opt-in, per window, and it was the default-plus-seam rule in action: 'display' by default, a prop to change it.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" gap={36} source="comp = react-x11-components · Flow fps measured on Windows · Html: Zen Garden 214, median">
+
+## Fast while moving, sharp once still
+
+<Grid cols={2} gap={24}>
+
+<Card title="Flow: zoom the picture you have">
+
+A GL zoom scales the graph it already drew and rebuilds it 120 ms after the wheel stops. An 8-notch zoom does no label work, where it did ~70 ms.
+
+<p style={{ fontSize: 26, fontWeight: 600 }}><O>105–120 → 137–149 fps · comp#128</O></p>
+
+</Card>
+
+<Card title="Html: a cheaper live resize">
+
+Over 12 ms in 2 of 3 frames? Snap scaled backgrounds, pause animations. After 300 ms still, pixel-identical to rest.
+
+<p style={{ fontSize: 26, fontWeight: 600 }}><O>step on screen 37 → 26 ms · comp#719</O></p>
+
+</Card>
+
+<Card title="Window resize: layout later">
+
+Content floors are skipped while the edge is dragged and measured once on release.
+
+<p style={{ fontSize: 26, fontWeight: 600 }}><O>71 → 28 ms a tick; 80 frames queued → 1 · #441</O></p>
+
+</Card>
+
+<Card title="Table scrub: skeletons first">
+
+Placeholder rows, filled viewport-first, prefetched when idle.
+
+<p style={{ fontSize: 26, fontWeight: 600 }}><O>worst stall 3.8 s → ~550 ms · comp#44</O></p>
+
+</Card>
+
+</Grid>
+
+Browsers make the same trade: low-resolution tiles and checkerboarding on a fast scroll, cheaper paint during a window resize.
+
+<Notes>
+
+The other half of a budget is what you do when you are over it. The pattern that recurs across the components is the one browsers use: while the user's hand is moving, frame rate matters more than detail, and once it stops, detail matters more than frame rate, and nobody notices the switch if the settled frame is exact.
+
+Flow's GL renderer zooms by scaling the scene it already has and rebuilds 120 ms after the wheel stops; labels are signed distance fields, so a zoom does no text work at all, and gesture frames went from about 110 to about 140 fps. The Html component watches its own frame cost during a live resize and, when it falls behind, snaps scaled backgrounds to a coarse grid and pauses animations, then repaints exactly once the drag rests.
+
+Core does the same with layout: the expensive content-floor measurement waits for the end of a window resize, and the 80 frames that used to queue up behind a drag became one. And tables show skeleton rows on a scrubbed scrollbar and fill them viewport-first. The browser parallels are analogies, not code shared with any browser.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="react-x11-components#100, src/maps/gl/view.ts QUALITY_LADDER, docs/prd-maps-gl.md">
+
+## Adaptive quality: the map's ladder
+
+<Cols template="1fr 600px" gap={56}>
+<Col gap={12}>
+
+<Eyebrow>A moving frame gets 12 ms. Drop, in order:</Eyebrow>
+
+<QualityLadder />
+
+<Small>Still for 140 ms: rung 0, sharp.</Small>
+
+</Col>
+<Col gap={22}>
+
+**Predict, then draw.** Each frame's cost is estimated from what it will draw, before it is drawn.
+
+**Climb back slowly.** A richer rung only once it is predicted under 75% of the budget, so it doesn't flicker.
+
+<Card variant="inverse" tone="orange" title="Don't stall the frame to measure it">
+
+Timing moving frames with glFinish read 16–52 ms for a few ms of drawing, and sent nearly every frame to the coarsest rung. It now learns from settled frames only.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+The clearest example of trading detail for frame rate is the GL map in react-x11-components. A moving frame has a 12 ms budget. Before drawing, the renderer predicts the frame's cost by walking the same gates the frame will walk over the record counts in the visible tiles, times a learned milliseconds-per-instance. It then picks the richest rung of a ladder that fits.
+
+The rungs drop what the picture misses least first: the half-pixel antialiasing pass on polygon edges, which is a fifth of a dense frame and invisible in motion; then the style's newest detail layers, which the style itself marks as details by bringing them in last; then tiles from a coarser zoom level, whose generalized geometry is cheaper. It climbs back only when the richer rung is predicted under 75% of the budget, so a frame sitting at the limit does not flicker between two levels. When the camera has been still for 140 ms it draws at full quality.
+
+The lesson from the PRD is worth stealing: the first version timed every moving frame with glFinish, which stalls the thread until the GPU is done, so it measured 16 to 52 ms for frames that cost a few, concluded the machine was slow, and drew nearly everything at the bottom rung. A mechanism whose job is frame rate must not stall the frame to observe itself.
+
+Measured with the budget forced down to 3 ms: panning London stayed on rungs 1 and 2 for 305 of 363 frames.
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={36}>
+
+<Eyebrow>3 / 4</Eyebrow>
+
+# Use the platform
+
+<Lead>"Copy this area" beats repainting it pixel by pixel. Upload once, then refer to it.</Lead>
+
+<Notes>
+
+Server-side primitives: CopyArea for a scroll, glyphs uploaded once and drawn by id, XRender composites. On macOS, Core Animation layers. And sometimes the platform is a library underneath you: the biggest scrolling win was a fix in ntk's clipping, 153.8 Mpx of composite work per wheel notch down to 2.1.
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/scrollblit.js · REACT_X11_NO_SCROLL_BLIT=1 turns it off for A/B">
+
+## A scroll is a copy plus a strip
+
+<Cols template="auto 1fr" gap={56} align="center">
+
+<ScrollBlit />
+
+<Col gap={22}>
+
+<B>■</B> **copied**: one CopyArea inside the back buffer. <O>■</O> **painted**: the strip that scrolled in, plus the scrollbar.
+
+Per wheel notch on a 500-row list: **44 requests, 0.065 Mpx** instead of 89 and 0.33.
+
+A virtualized list mounts rows inside the viewport every frame. A per-frame **ledger** repaints those after the copy: ten notches cost 284 requests instead of 785.
+
+Invariant, pinned by a pixel test: the blitted frame is **byte-identical** to a full repaint.
+
+</Col>
+</Cols>
+
+<Notes>
+
+Scrolling is the one layout change that carries a bound: it moves an offset inside one viewport and nothing else, at input rate. When a frame is a pure single-axis scroll of one viewport, the band that stays visible is copied inside ntk's back buffer with one CopyArea (Window.scrollRegion), and the frame's damage narrows to the strip that came into view plus the scrollbar.
+
+Everything about it is a gate that falls back to a normal repaint: fractional or diagonal deltas, page-sized jumps, overlapping non-descendants.
+
+The hard case was the virtualized list, whose own commit mounts rows and resizes spacers inside the viewport on every scroll frame, which used to disable the fast path after the first notch. Now those claims go into a per-frame ledger on the scrolling node and are repainted after the copy.
+
+The rule that keeps it honest: a pixel test asserts every blitted frame is byte-identical to the full repaint it replaced, and the benchmark baseline is recorded with the blit on, so a change that silently stopped it firing fails the check.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="captured from ntk 8.23.2 + node-x11's in-process server · ntk docs/text.md, docs/shared-glyphs.md">
+
+## Upload once, keep it on the server
+
+<Cols template="1fr 600px" gap={48}>
+<Col gap={16}>
+
+One **GlyphSet** per (face, size). `AddGlyphs` for "Type": ids we choose, 0–3, and a GLYPHINFO each:
+
+| glyph  | local id |   w × h |     x, y | xOff: stored advance |
+| ------ | -------: | ------: | -------: | -------------------: |
+| T (55) |        0 | 20 × 23 |    0, 23 |       **<O>20</O>** |
+| y (92) |        1 | 16 × 24 |    0, 17 |       **<O>16</O>** |
+| p (83) |        2 | 16 × 24 |   −2, 17 |       **<O>18</O>** |
+| e (72) |        3 | 16 × 18 |   −1, 17 |       **<O>18</O>** |
+
+Plus the a8 coverage bitmaps: **1,592 bytes**, sent once. The server now moves its own pen by xOff.
+
+</Col>
+<Col gap={18}>
+
+**Ids are ours.** Compact per set, so one byte per glyph until a size has used 256 glyphs.
+
+**Rasterizer:** signed-area accumulation from fontkit outlines, analytic antialiasing. ~25 µs for a 20 px icon.
+
+**Bounded:** 8 MB LRU of uploaded bitmaps; a cold (face, size) is freed with FreeGlyphSet.
+
+**Shared:** ntk apps on one display share glyph sets (\_NTK\_GLYPHD). Each later app skips ~8 ms and ~11.5 KB per face and size.
+
+**Huge sizes** (over 256 px) go as trapezoids: bitmaps grow with size², outlines with √size.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This table is the real AddGlyphs request ntk sent for the word Type, captured off the socket. XRender lets the client choose glyph ids, so ntk numbers glyphs 0, 1, 2, 3 per glyph set rather than using the font's own ids (55, 92, 83, 72). That keeps every id under 256 for a typical UI size, which means the 8-bit variant of CompositeGlyphs, one byte per glyph on every draw.
+
+Each GLYPHINFO says how big the bitmap is, where it sits relative to the glyph origin, and xOff: how far the server should move its pen after drawing it. ntk stores the rounded default advance there, so for ordinary text the server walks the pen itself and the client sends nothing per glyph but the id.
+
+Bitmaps come from ntk's own rasterizer over fontkit's outlines, signed-area accumulation as in font-rs and stb_truetype, which gives exact antialiasing with no supersampling. The cache is bounded at 8 MB per connection, and since ntk 8 the glyph sets can be shared between processes on the same display through a small directory protocol, so the second app showing the same UI font rasterizes and uploads nothing.
+
+Very large text, over 256 px, is sent as trapezoids instead, because a cached bitmap costs size squared while an outline costs roughly the square root of the size.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="bytes as captured on the socket; the second draw of the same word sends this request and nothing else">
+
+## 52 bytes draw a kerned word
+
+<Cols template="760px 1fr" gap={40}>
+<Col gap={14}>
+
+<Shot src="img/type-glyphs.png" alt="The word Type in Arial 32px as composited by the X server, magnified with a pixel grid. A blue baseline; solid orange lines at x 20, 38, 54 and 72 where each glyph's origin lands; a dashed line at x 40 where the y would start without kerning" width={760} height={400} />
+
+<Small><O>│</O> each glyph's origin: 20, 38, 54, 72 · <O>┆</O> 40: where T's stored advance would put y · <B>─</B> baseline</Small>
+
+</Col>
+<Col>
+
+<table className="mono-first">
+<thead>
+<tr><th style={{ width: '44%' }}>bytes</th><th>meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>82 17 0d00</td><td>Render · CompositeGlyphs8 · 13 words</td></tr>
+<tr><td>03 000000</td><td>op Over</td></tr>
+<tr><td>08002000 06002000</td><td>src: solid ink · dst: the window</td></tr>
+<tr><td>00000000 09002000</td><td>no mask format · glyphset Arial 32</td></tr>
+<tr><td>1400 6400</td><td>source origin 20, 100</td></tr>
+<tr className="hl-blue"><td>01 000000 1400 6400</td><td>elt: 1 glyph, pen to 20, 100</td></tr>
+<tr className="hl-blue"><td>00 ······</td><td>T</td></tr>
+<tr className="hl-orange"><td>03 000000 <b>feff</b> 0000</td><td>elt: 3 glyphs, pen <b>−2</b>: the kern</td></tr>
+<tr className="hl-orange"><td>01 02 03 ··</td><td>y p e, the server walks the pen</td></tr>
+</tbody>
+</table>
+
+</Col>
+</Cols>
+
+Unkerned text is one elt: 8 bytes, then **1 byte per glyph**. Each kern, mark or drift opens a new elt. A 60-character line costs ~70 bytes.
+
+<Notes>
+
+This is the punchline of the text section, and every byte on it is real: captured from the socket while ntk drew the word Type in Arial at 32 px, and the picture is the server's own output, read back and magnified.
+
+The request header says Render, CompositeGlyphs8, 13 four-byte words. Then the compositing operator, the source picture (a solid black), the destination (the window), no intermediate mask, the glyph set holding Arial at 32 px, and the source origin. Then the glyph list, made of elements. Each element is an 8-byte header (a count, padding, and a pen offset dx, dy) followed by one byte per glyph id, padded to four bytes.
+
+The first element moves the pen to 20, 100 and draws local glyph 0, T. The server then advances the pen by T's stored xOff, 20, to x 40. But the shaped position of y is 17.78 after T, which rounds to 38, because Arial kerns T and y. So the encoder starts a second element with dx minus two, the feff, and lists y, p and e; the server advances by their stored 16 and 18 by itself.
+
+Without the kern this would be a single element and 40 bytes. A typical 60-character line is around 70 bytes after warm-up, and redrawing it never uploads anything again.
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={36}>
+
+<Eyebrow>4 / 4</Eyebrow>
+
+# Don't render what nobody sees
+
+<Lead>Not in the viewport, not in the damage, not on screen at all.</Lead>
+
+<Notes>
+
+Three scales: rows outside the viewport (virtual lists), nodes outside the damaged rects (culling), and whole windows nobody can see (frames stop).
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/paint.js:341 and :553 (simplified)">
+
+## Clip the pixels, cull the drawing
+
+<Cols template="1fr 600px" gap={40}>
+<Col>
+
+```js
+for (const rect of damage) { // ≤ 4 rects
+  ctx.save();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  ctx.clip(); // ntk records this as "touched"
+  fillBackground(ctx, rect);
+  this._paintChildren(ctx);
+  ctx.restore();
+}
+
+_paintChildren(ctx) {
+  for (const child of this.paintOrder()) { // zIndex
+    if (child._outsideDamage()) continue;
+    child.paint(ctx);
+  }
+}
+```
+
+</Col>
+<Col gap={24}>
+
+**A clip bounds pixels, not requests.** Clipped-away drawing is still built, sent and composited through a mask.
+
+**Culling is the saving.** A subtree whose reach misses the rect is skipped whole.
+
+**Reach, not rect.** A child can draw outside a parent that doesn't clip, so cull on the subtree's bounds, cached per node.
+
+**The clip reports damage.** ntk presents exactly the clipped areas.
+
+</Col>
+</Cols>
+
+<Notes>
+
+Each damage rect gets one pass. The pass clips to the rect, fills the window background inside it, and walks the tree in paint order (document order, sorted by zIndex only when a key disagrees).
+
+The important line is the cull: a child whose subtree cannot reach the damage rect is skipped entirely, children and all. That is where the protocol savings come from. A clip alone would still put every request on the wire; the server would just throw the pixels away afterwards, through a mask.
+
+The cull uses the subtree's paint reach, not the node's own rect, because a child of a parent that does not clip can draw outside it; reach is cached per node and every route that can change it has to drop the cache.
+
+Last, the clip doubles as the damage report to ntk: it takes each operation's clip as the region that operation could have touched, and at present time copies only those regions from the back buffer to the window.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="Cocoa: AppKit occlusion (src/cocoa/window.js) · Wayland: wl_surface.frame, src/wayland/framewatch.js · X11: minimise · Cocoa bench gate: frames for a window nobody can see">
+
+## Nobody is looking: stop
+
+<Grid cols={3} gap={32}>
+
+<Card variant="top" tone="blue" label="Out of the viewport" title="Virtual lists">
+
+Table and Tree build only the rows on screen. A 50,000-row table scrolls like a 50-row one.
+
+</Card>
+
+<Card variant="top" tone="orange" label="Covered or minimised" title="Frames stop">
+
+AppKit's occlusion event, Wayland's frame callback and X11's minimise all hold the frame clock.
+
+</Card>
+
+<Card variant="top" label="Off screen, still animating" title="Clocks suspend">
+
+Animations and `<glarea>` frames wait too, and `useWindowState().presenting` tells the app.
+
+</Card>
+
+</Grid>
+
+<Lead>"Frames painted for a window nobody can see" is a bench gate on macOS. A regression there fails CI.</Lead>
+
+<Notes>
+
+The point of the gate is that this kind of waste is invisible: no one looks at a covered window, and that is exactly why nobody notices it burning a core.
+
+</Notes>
+</Slide>

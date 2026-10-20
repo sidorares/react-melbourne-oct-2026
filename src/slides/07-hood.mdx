@@ -1,0 +1,195 @@
+export const section = "Under the hood";
+
+<Slide theme="dark" source="Cocoa / win32 swap the bottom three layers for a native bridge">
+
+## The layers, and who decides what
+
+<Col gap={12}>
+<Layer name="react">Components, hooks, setState. Knows nothing about output.</Layer>
+<Layer name="react-reconciler">Fibers, lanes, the scheduler, diffing, render and commit phases</Layer>
+<Layer name="HostConfig" tone="orange">~60 callbacks: create, attach, update, remove. The contract.</Layer>
+<Layer name="react-x11 nodes">Retained tree + yoga layout. Decides **how often** drawing happens.</Layer>
+<Layer name="ntk">Windows, 2d canvas over XRender, fonts. Decides **how** drawing is encoded.</Layer>
+<Layer name="node-x11">The X11 wire protocol in pure JavaScript. No policy.</Layer>
+<Layer name="X server" dashed>Local socket, or across the network</Layer>
+</Col>
+
+<Notes>
+
+The split of responsibility matters for the second half of the talk. node-x11 is the protocol and nothing else. ntk gives you windows, a canvas-like 2d context over XRender, glyph caches; it owns how a drawing is encoded on the wire. react-x11 owns how often anything is drawn: which nodes changed, which rectangles are stale, when a frame goes out.
+
+The highlighted layer is the only thing a renderer author writes against react-reconciler: the host config.
+
+On macOS and Windows the bottom three layers become a native bridge (@windowkit/appkit, @windowkit/win32); everything from the node tree up is shared.
+
+</Notes>
+</Slide>
+
+<Slide gap={48} source="src/Reconciler.js">
+
+## A renderer is one function call
+
+<Cols template="1fr 520px" gap={48}>
+<Col>
+
+<Code size={26}>
+
+```js
+import ReactReconciler from 'react-reconciler';
+
+export const Renderer = ReactReconciler(HostConfig);
+
+// createRoot()
+const container = Renderer.createContainer(
+  app,           // containerInfo: the ntk App
+  ConcurrentRoot,  // lanes, transitions, Suspense
+  /* …error handlers */);
+
+// root.render(<App />)
+Renderer.updateContainerSync(tree, container, null, cb);
+Renderer.flushSyncWork();
+```
+
+</Code>
+
+</Col>
+<Col gap={28}>
+
+React core never touches output. It calls **your** callbacks.
+
+The container is whatever you want: here, the X connection.
+
+The initial mount is synchronous, so tests can assert straight after `render()`.
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is the whole wiring. react-reconciler is a factory: you hand it an object of callbacks and get back a renderer with createContainer, updateContainer and friends. The containerInfo argument is opaque to React; it is handed back to you in appendChildToContainer and friends. react-x11 passes the ntk App, the X connection.
+
+ConcurrentRoot opts into the modern behaviour: lanes, transitions, time slicing, Suspense.
+
+render() uses updateContainerSync + flushSyncWork, so a mount is applied before the call returns; painting is still asynchronous, a frame later. (react-x11 is written against react-reconciler 0.33, React 19.)
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement">
+
+# Render computes.<br />Commit touches the world.
+
+<Lead>Anything you do in **createInstance** may be thrown away. Anything you do in **appendChild** has happened.</Lead>
+
+<Notes>
+
+This is the slide for anyone who has written a renderer and put side effects in createInstance or appendChild, which is exactly the mistake I made.
+
+The next few slides unpack it: what the render phase is allowed to do, what order the commit runs in, and the trap that two callbacks with nearly the same name live in different phases.
+
+</Notes>
+</Slide>
+
+<Slide source="GL needs its own surface; a foreign window belongs to another process">
+
+## Four elements are windows; the rest is painted
+
+<table className="mono-first">
+  <thead>
+    <tr><th style={{ width: '26%' }}>Element</th><th style={{ width: '44%' }}>Becomes</th><th style={{ width: '30%' }}>Created in</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><O>{'<window>'}</O></td><td>X CreateWindow · NSWindow · HWND</td><td>commit: realize(), top-down</td></tr>
+    <tr><td><O>{'<popup>'}</O></td><td>override-redirect window: menus, tooltips</td><td>commitMount, after measuring</td></tr>
+    <tr><td><O>{'<glarea>'}</O></td><td>child window on a GLX visual</td><td>commit, with its window</td></tr>
+    <tr><td><O>{'<foreign>'}</O></td><td>another process's window, over XEmbed</td><td>commit: reparent into a socket</td></tr>
+    <tr className="hl-blue"><td><B>{'<box> <text> <image> <canvas> …'}</B></td><td>one JS node + one yoga node, drawn into the owning window's back buffer</td><td>render: a constructor, nothing more</td></tr>
+  </tbody>
+</table>
+
+A form with 300 controls is one X window. Clicks reach a {'<box>'} by hit testing the node tree, with capture and bubble like the DOM.
+
+<Notes>
+
+This is the architectural decision everything else follows from. Early X toolkits made every widget a window; react-x11 does not. Only four elements map to real windows of the display system: window and popup because they are what the window manager deals with, glarea because OpenGL needs its own drawable, and foreign because the window belongs to another process.
+
+Everything else is a lightweight retained node with one yoga layout node, painted into the owning window's double-buffered 2d context. That is why the rest of the talk is about damage: with one surface per window, the renderer, not the X server, decides what to repaint, and it can decide very precisely.
+
+It is also why events are synthetic: X only knows that the pointer is in the window, so react-x11 hit-tests its own tree front to back and dispatches capture and bubble phases itself.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" gap={36} source="steps 5–10 run before the event handler returns, when the last frame has landed">
+
+## One click, from the wire to the pixels
+
+<Grid cols={2} gap="16px 40px">
+<Numbered n="1" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>X server</span> sends a 32-byte ButtonPress
+
+</Numbered>
+<Numbered n="6" tone="orange" variant="box">
+
+<O>flushSyncWork</O>: Counter renders, commit runs
+
+</Numbered>
+<Numbered n="2" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>node-x11 → ntk</span> decode; window emits 'mousedown'
+
+</Numbered>
+<Numbered n="7" tone="orange" variant="box">
+
+<O>commitTextUpdate · commitUpdate</O> → node.applyProps
+
+</Numbered>
+<Numbered n="3" tone="blue" variant="box">
+
+<B>EventManager</B> hit-tests the node tree, front to back
+
+</Numbered>
+<Numbered n="8" tone="blue" variant="box">
+
+<B>invalidate</B>: a damage rect on the window
+
+</Numbered>
+<Numbered n="4" tone="blue" variant="box">
+
+<B>capture → target → bubble</B>, handlers read from props now
+
+</Numbered>
+<Numbered n="9" tone="blue" variant="box">
+
+<B>flush</B>: layout, paint the damage into the back buffer
+
+</Numbered>
+<Numbered n="5" tone="orange" variant="box">
+
+<O>onClick</O> → setN(n + 1) on SyncLane
+
+</Numbered>
+<Numbered n="10" tone="muted" variant="box">
+
+<span style={{ color: 'var(--fg-muted)' }}>ntk</span> CopyArea of just the damaged rects
+
+</Numbered>
+</Grid>
+
+<Cols template="max-content max-content max-content" gap={40}>
+<Small><O>■ React</O></Small>
+<Small><B>■ react-x11</B></Small>
+<Small>■ protocol and toolkit</Small>
+</Cols>
+
+<Notes>
+
+Follow the counter from the start of the talk. The X server sends a ButtonPress, a 32-byte event. node-x11 decodes it; ntk's Window object emits mousedown (and coalesces motion to one per frame). react-x11's EventManager subscribes to each window once, never per element, and reads handlers from node.props at dispatch time, so a handler is never stale. It hit-tests the retained node tree front to back, in paint order, and dispatches a synthetic event with capture and bubble phases.
+
+The handler runs inside runWithPriority(Discrete), so setN lands on SyncLane. The dispatcher's discrete wrapper then calls flushSyncWork, which renders and commits immediately: the text chunk gets commitTextUpdate, nodes whose parents re-rendered get commitUpdate and therefore applyProps. Changed nodes call invalidate, which records a damage rect on the owning window.
+
+Then flushPendingFrames paints right away if the server has shown the previous frame: layout, paint into ntk's back buffer, and present by copying only the damaged rects. All of that happens before the event handler returns.
+
+</Notes>
+</Slide>

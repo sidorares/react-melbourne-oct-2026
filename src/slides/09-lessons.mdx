@@ -1,0 +1,104 @@
+export const section = "Lessons learned";
+
+<Slide theme="dark" layout="statement" gap={36}>
+
+<Eyebrow tone="orange">Lessons learned · 1</Eyebrow>
+
+# Programming is still fun
+
+<Lead>…maybe a different kind of fun</Lead>
+
+<Notes>
+
+Recently watched Terence Tao and 3Blue1Brown on AI in mathematics. The parallel: the work moves from writing every line to deciding what is true, what is worth building, and checking that it is.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="react-x11#413 · AGENTS.md: Check it on a real display">
+
+<Eyebrow>Lessons learned · 2</Eyebrow>
+
+## Tests and specs help a lot. They can't replace eyeballing
+
+<Grid cols={3} gap={32}>
+
+<Card variant="top" tone="orange" title="Green suite, 700× slower">
+
+A shadow blur re-run on every composite. Requests, bytes, composites, area and the rendered pixels were all identical before and after the fix.
+
+</Card>
+
+<Card variant="top" tone="blue" title="Obvious once somebody looked">
+
+Text 3 px low, a badge riding high, a header that never lined up with its table. Each one passed.
+
+</Card>
+
+<Card variant="top" title="So: gut feeling, and demos">
+
+Hover it, drag it, resize it. The stress demo exists to be looked at.
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+The blur bug was found by hovering a card and feeling the lag. No metric moved until a new one was added that counts convolved pixels. Every visual defect in the examples rework passed a green suite and was obvious the moment somebody looked.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" gap={36} source="react-x11-components: src/html, first commit 2026-08-15">
+
+<Eyebrow tone="orange">Lessons learned · 3</Eyebrow>
+
+# The web platform is huge
+
+<Lead>~490 commits into the HTML engine since mid-August, and still going</Lead>
+
+<Small style={{ fontSize: 28 }}>This week alone: `@property` · `mask-composite` · repeating gradients · `-webkit-line-clamp` · styled input buttons</Small>
+
+<Notes>
+
+Those are the last five commits in the HTML engine, and each one is something a real page relied on. Acid3 passes most of its 100 tests (check the latest number before saying one).
+
+</Notes>
+</Slide>
+
+<Slide theme="accent" layout="statement" gap={36}>
+
+<Eyebrow>The experiment</Eyebrow>
+
+# What did it build?
+
+<Notes>
+
+Switch to the oneshot window. Read out the idea the audience gave, run what the agent made (its README says how), and skim its NOTES.md for what it decided and what it couldn't do. Whatever it is, it is a fair data point.
+
+</Notes>
+</Slide>
+
+<Slide layout="statement" bar gap={48}>
+
+# Thanks. Questions?
+
+<Col gap={20}>
+<p className="mono" style={{ fontSize: 32 }}>[github.com/sidorares/react-x11](https://github.com/sidorares/react-x11)</p>
+<p className="mono" style={{ fontSize: 32 }}>[sidorares.github.io/react-x11](https://sidorares.github.io/react-x11/)</p>
+<p className="mono" style={{ fontSize: 32 }}>npm install react-x11</p>
+</Col>
+
+The docs site's playground runs the real renderer in your browser, with an X server written in JavaScript.
+
+<p style={{ color: 'var(--fg-muted)' }}>Andrey Sidorov · @sidorares</p>
+
+<Notes>
+
+Pointers for people who want to go deeper. The repository's src/Reconciler.js is the whole host config, heavily commented. src/nodes/ is the retained tree, split by concern: layout, paint, invalidate, scroll blit.
+
+The documentation site has a playground that bundles the actual renderer together with node-x11's pure-JavaScript X server, so you can edit JSX and see the real paint path in a browser tab.
+
+</Notes>
+</Slide>

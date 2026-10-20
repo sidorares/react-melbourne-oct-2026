@@ -4,6 +4,19 @@ export const WIDTH = 1920;
 export const HEIGHT = 1080;
 
 /**
+ * The react-x11 example browser (react-x11-components' examples/browser)
+ * mounts an <iframe>'s document only where no transform but a translation
+ * is around it, and nothing fixed to the viewport is: a scaled stage, or a
+ * `position: fixed` deck, leaves the playground slide blank there. In that
+ * browser the canvas is shown at 1:1, centred, and cropped by a window
+ * smaller than 1920×1080, the deck is absolute rather than fixed, and the
+ * progress bar, which a cropped slide's iframe runs under, is left out.
+ */
+export const UNSCALED =
+  typeof navigator !== 'undefined' &&
+  /react-x11-components/.test(navigator.userAgent);
+
+/**
  * A 1920×1080 canvas scaled to fit its box (or to a fixed scale, for
  * thumbnails and print). Slides are authored in canvas pixels, so a layout
  * looks the same on a laptop, a projector and in the PDF.
@@ -56,7 +69,12 @@ export function Stage({ children, scale: fixedScale, label }) {
       <div
         className="stage__canvas"
         ref={canvas}
-        style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
+        style={{
+          transform:
+            UNSCALED && !fixedScale
+              ? 'translate(-50%, -50%)'
+              : `translate(-50%, -50%) scale(${scale})`,
+        }}
       >
         {children}
       </div>
