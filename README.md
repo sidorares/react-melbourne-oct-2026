@@ -42,6 +42,7 @@ src/components/    slide building blocks and diagrams, and their CSS
 src/deck/          the deck runtime: scaling, keys, presenter, overview, print
 public/img/        images
 examples/          the follow-along programs from the "Try it" slides
+demo/              the stress-demo trailer, a package of its own (demo/README.md)
 tools/             scripts that regenerate the screenshots and the glyph capture
 SOURCES.md         where every claim and number on the slides comes from
 ```
