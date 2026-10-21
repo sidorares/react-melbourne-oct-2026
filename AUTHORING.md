@@ -87,7 +87,7 @@ write it as JSX: `<tr className="hl-blue">`, `<tr className="hl-orange">`,
 `<table className="mono-first">`.
 
 Diagrams, one tag each: `<InterruptTimeline />`, `<DamageRects />`,
-`<ScrollBlit />`, `<BidiRows />`, `<QualityLadder />`
+`<ScrollBlit />`, `<BidiRows />`, `<QualityLadder />`, `<CodeShare />`
 (src/components/diagrams.jsx; their data are props with defaults).
 
 ## Builds: a slide in several steps

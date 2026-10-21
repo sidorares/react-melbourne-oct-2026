@@ -25,6 +25,7 @@ import {
   ScrollBlit,
   BidiRows,
   QualityLadder,
+  CodeShare,
 } from './diagrams.jsx';
 
 export const components = {
@@ -52,4 +53,5 @@ export const components = {
   ScrollBlit,
   BidiRows,
   QualityLadder,
+  CodeShare,
 };

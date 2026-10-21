@@ -1,5 +1,90 @@
 export const section = "Under the hood";
 
+<Slide gap={40} source="react-x11 at c43453f (26 July, fixes #4) and at 2.51.0 (21 October) · .js/.ts/.jsx/.tsx lines under src/, comments included">
+
+## After #4: 411 lines became 134,000
+
+<Cols template="380px 1fr" gap={64} align="center">
+<Col gap={40}>
+
+<Stat value="411" label="lines in src/, 3 files · 26 July, the day #4 closed" tone="muted" />
+
+<Stat value="133,949" label="lines in src/, 334 files · 21 October" />
+
+<Stat value="144,517" label="lines of tests: more than the code" tone="blue" />
+
+</Col>
+
+<CodeShare />
+
+</Cols>
+
+<Notes>
+
+Back to the cliffhanger from History. On 26 July, when #4 was closed, react-x11's whole src/ was 411 lines in three files: Reconciler.js, DevToolsIntegration.js and index.js. Today it is 134 thousand lines in 334 files, and the tests are longer than the code.
+
+Read the bars against the three layers from "What is a UI toolkit". What you see is the retained tree and the built-in components. The desktop around it is the biggest bar, plus the backends, because Cocoa, Wayland and win32 each need their own. The big components on top mostly live in another repo, react-x11-components, and are not counted here.
+
+The punchline is the last bar: the part React talks to, the host config in Reconciler.js, is about a thousand lines, under 1%. Writing a React renderer is the small part; a toolkit is the rest.
+
+What the numbers are: react-x11 only (not ntk, node-x11 or the components), lines including comments (the code is heavily commented), grouped by file. SOURCES.md has the rules.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="c43453f · 1a9afcd · both 26 July 2026 · the 2015 caption is from the How it started slide">
+
+## One day in July, two decisions
+
+<Grid cols={3} gap={32}>
+
+<Card variant="top" tone="muted" label="2015" title="Every element a window">
+
+Each {'<box>'} and {'<text>'} a real X window, created bottom-up: children before their parents, then reparented
+
+</Card>
+
+<Step>
+
+<Card variant="top" tone="blue" label="26 July · c43453f · fixes #4" title="Windows created top-down, in the commit">
+
+createInstance makes no X calls; realize() creates each window with its real parent. +145 −86 lines
+
+</Card>
+
+</Step>
+
+<Step>
+
+<Card variant="top" tone="orange" label="26 July · 1a9afcd" title="Only four elements are windows">
+
+A retained tree with yoga layout and synthetic events; everything else is painted. +3,956 lines
+
+</Card>
+
+</Step>
+
+</Grid>
+
+<Step>
+
+<Small>The rest of this section: the first decision, then the second, then one click through both.</Small>
+
+</Step>
+
+<Notes>
+
+The 2015 gif made two choices at once: every element is a window, and windows are created as React builds them, which is bottom-up. Both had to go, and both went on the same day.
+
+The first is about React: which phase may touch the world. It was a change of about 150 lines, nearly all in the host config.
+
+The second is the 134 thousand lines. Once only windows are windows, the renderer has to do layout, hit testing, painting and damage itself, and that is most of what the stress demo shows.
+
+Next: the layers, to see where each one lives.
+
+</Notes>
+</Slide>
+
 <Slide theme="dark" source="Cocoa / win32 swap the bottom three layers for a native bridge">
 
 ## The layers, and who decides what
@@ -75,6 +160,71 @@ render() uses updateContainerSync + flushSyncWork, so a mount is applied before 
 </Notes>
 </Slide>
 
+<Slide source="finalizeInitialChildren runs after each createInstance (two elided for space)">
+
+## Mounting one tree: the real call order
+
+<Cols template="1fr 1fr" gap={32}>
+<Col gap={12}>
+
+<Eyebrow tone="blue">Render phase</Eyebrow>
+
+```js
+// beginWork: top-down
+getRootHostContext()
+getChildHostContext(ctx, 'window')
+getChildHostContext(ctx, 'box')
+getChildHostContext(ctx, 'text')
+// completeWork: bottom-up
+createTextInstance('hi')
+createInstance('text')
+appendInitialChild(text, hi)
+finalizeInitialChildren(text)
+createInstance('box')
+appendInitialChild(box, text)
+createInstance('window')
+appendInitialChild(window, box)
+```
+
+</Col>
+<Col gap={12}>
+
+<Eyebrow tone="orange">Commit phase</Eyebrow>
+
+```js
+prepareForCommit()
+appendChildToContainer(app, window)
+  └ attachTopLevel
+    └ window.realize()
+      CreateWindow, props, child windows
+resetAfterCommit()
+  └ flushWindowRestacks()
+  └ flushWindowMaps()
+      MapWindow
+// layout pass
+commitMount(…) only where
+  finalizeInitialChildren
+  returned true
+```
+
+</Col>
+</Cols>
+
+<Notes>
+
+This is issue #4 on one slide. completeWork comes back up the tree, so a renderer that creates windows in createInstance creates the text's window before the box's, and the box's before the window's: bottom-up, with no parent to name yet. That is what the 2015 version did. Now the left column makes no X calls at all, and everything happens on the right.
+
+It is the most useful slide for anyone writing a renderer. beginWork goes down the tree and computes host context for each host element. completeWork comes back up, so the deepest node is created first: the text chunk, then text, then the box, then the window. Each parent is created after its children and immediately given them through appendInitialChild.
+
+By the end of the render phase there is a complete, detached tree of react-x11 nodes, with yoga nodes, and zero X11 requests sent.
+
+The commit then makes exactly one call for the whole thing, appendChildToContainer with the window. react-x11 turns that into realize(), which creates the X window and recurses into child windows. Mapping waits for resetAfterCommit, so a tree of windows appears at once.
+
+commitMount runs later, in the layout pass, only for instances whose finalizeInitialChildren returned true.
+
+</Notes>
+</Slide>
+
 <Slide theme="accent" layout="statement">
 
 # Render computes.<br />Commit touches the world.
@@ -85,7 +235,60 @@ render() uses updateContainerSync + flushSyncWork, so a mount is applied before 
 
 This is the slide for anyone who has written a renderer and put side effects in createInstance or appendChild, which is exactly the mistake I made.
 
-The next slide is where it lands in react-x11: which elements become windows in the commit, and which are plain objects built in render. If there are questions, the backup slides unpack it: what the render phase is allowed to do (Render builds a tree nobody sees yet), what order the commit runs in (The commit, in order), and the trap that two callbacks with nearly the same name live in different phases (The trap: two "append"s, two phases).
+This is the rule the 2015 version broke: it created windows during render, so they were born bottom-up, and a render React threw away left windows on the server. The next slide is where it lands in react-x11: realize(), the walk that creates windows in the commit. If there are questions, the backup slides unpack it: what the render phase is allowed to do (Render builds a tree nobody sees yet), what order the commit runs in (The commit, in order), and the trap that two callbacks with nearly the same name live in different phases (The trap: two "append"s, two phases).
+
+</Notes>
+</Slide>
+
+<Slide source="src/nodes/window/window.js:318 (simplified)">
+
+## realize(): the window is born in the commit
+
+<Cols template="1fr 640px" gap={40}>
+<Col>
+
+```js
+realize(parentWindow) { // commit only
+  const natural = this._measure();
+  attrs.width = natural.width;
+  attrs.height = natural.height;
+  attrs.parent = parentWindow;
+  attrs.backgroundPixel = pixelFor(bg);
+  attrs.eventMask |= WINDOW_EVENT_MASK;
+  const wnd = app.createWindow(attrs);
+  this._attachWindowListeners();
+  for (const c of this.children)
+    if (c.isWindow) c.realize(wnd);
+  this._realizeChildWindows(); // glarea…
+  applyWindowStates(wnd, …);
+  this._applyTransientFor(…);
+  // MapWindow: in resetAfterCommit
+}
+```
+
+</Col>
+<Col gap={22}>
+
+**Lay out first.** An auto-sized window is created at its final size, with no resize jump after mapping.
+
+**Parent at creation.** Top-down, so there's never a ReparentWindow.
+
+**Background pixel.** The server fills newly exposed area with the theme colour, so no white flash on resize.
+
+**State before map.** EWMH state and WM\_TRANSIENT\_FOR are read when the WM frames the window: open fullscreen without flashing.
+
+</Col>
+</Cols>
+
+<Notes>
+
+realize() is the fix for #4: the commit-phase walk, top-down. (Backup's "The trap: two appends" shows why it has to walk the subtree itself: React only tells the commit about the root of a new subtree.) It is called from appendChildToContainer for a top-level window, from a mounted parent's insertBefore for a nested one, and from commitMount for a popup.
+
+Order matters at every step. Layout runs before CreateWindow, so a window whose size is auto is born the right size; doing it afterwards means a window mapped at a default size and corrected a frame later. The parent is known at creation because realization is top-down.
+
+The background pixel is what X paints into newly exposed area before the app has drawn it, so setting it to the colour about to be painted makes a resize flash invisible.
+
+And window-manager state (fullscreen, maximized, transient-for, decorations, XDND awareness) is written before the map, because an unmapped window declares its initial state while a mapped one has to ask. Mapping itself is deferred to resetAfterCommit so a tree of windows appears at once.
 
 </Notes>
 </Slide>
@@ -111,7 +314,7 @@ A form with 300 controls is one X window. Clicks reach a {'<box>'} by hit testin
 
 <Notes>
 
-This is the architectural decision everything else follows from. Early X toolkits made every widget a window; react-x11 does not. Only four elements map to real windows of the display system: window and popup because they are what the window manager deals with, glarea because OpenGL needs its own drawable, and foreign because the window belongs to another process.
+Decision two from the July slide, and the architectural decision everything else follows from. Early X toolkits made every widget a window; react-x11 does not. Only four elements map to real windows of the display system: window and popup because they are what the window manager deals with, glarea because OpenGL needs its own drawable, and foreign because the window belongs to another process.
 
 Everything else is a lightweight retained node with one yoga layout node, painted into the owning window's double-buffered 2d context. That is why the rest of the talk is about damage: with one surface per window, the renderer, not the X server, decides what to repaint, and it can decide very precisely.
 
@@ -190,6 +393,8 @@ Follow the counter we just built. The X server sends a ButtonPress, a 32-byte ev
 The handler runs inside runWithPriority(Discrete), so setN lands on SyncLane. The dispatcher's discrete wrapper then calls flushSyncWork, which renders and commits immediately: the text chunk gets commitTextUpdate, nodes whose parents re-rendered get commitUpdate and therefore applyProps. Changed nodes call invalidate, which records a damage rect on the owning window.
 
 Then flushPendingFrames paints right away if the server has shown the previous frame: layout, paint into ntk's back buffer, and present by copying only the damaged rects. All of that happens before the event handler returns.
+
+Bridge to the next section: that is one click, and it is cheap. Now do it 120 times a second, with a million rows, over ssh.
 
 </Notes>
 </Slide>

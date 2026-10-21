@@ -187,3 +187,42 @@ export function QualityLadder({
     </div>
   );
 }
+
+/** Where react-x11's source lines are, by area (Under the hood section). */
+export function CodeShare({
+  rows = [
+    { name: 'Desktop and input', detail: 'events, focus, styles, fonts, a11y, menus, tray, DnD, DBus', lines: 44142 },
+    { name: 'Platform backends', detail: 'Cocoa, Wayland, win32', lines: 36599 },
+    { name: 'Retained tree and painting', detail: 'layout, paint, damage, scroll', lines: 27521 },
+    { name: 'Types', detail: 'hand-written .d.ts', lines: 9899 },
+    { name: 'Built-in components', detail: 'Button, Select, menus, Dialog…', lines: 8287 },
+    { name: 'DX', detail: 'dev CLI, Fast Refresh, test harness, DevTools', lines: 6423 },
+    { name: 'Reconciler.js', detail: 'everything React calls', lines: 1078, tone: 'orange' },
+  ],
+  total = 133949,
+}) {
+  const max = Math.max(...rows.map((r) => r.lines));
+  const k = (n) => `${(n / 1000).toFixed(1)}k`;
+  const pct = (n) => {
+    const p = (100 * n) / total;
+    return p < 1 ? `${p.toFixed(1)}%` : `${Math.round(p)}%`;
+  };
+  return (
+    <div className="share">
+      {rows.map((r) => (
+        <div key={r.name} className={`share__row tone--${r.tone ?? 'blue'}`}>
+          <div>
+            <p className="share__name">{r.name}</p>
+            <p className="share__detail">{r.detail}</p>
+          </div>
+          <div className="share__track">
+            <div className="share__bar" style={{ width: (440 * r.lines) / max }} />
+            <p className="share__value">
+              {k(r.lines)} · {pct(r.lines)}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

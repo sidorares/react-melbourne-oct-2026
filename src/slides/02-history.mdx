@@ -99,7 +99,7 @@ Windows created **top-down, in the commit**. Then rapid iterations:
 
 Issue #4: windows were created bottom-up, children before their parents, so everything had to be reparented and staged. The fix was to make no display calls in render at all, and to create windows top-down in the commit phase, each one naming its real parent from the start. Closed 26 July 2026.
 
-After that it went fast. Each commit on master is a squash-merged PR, so the bars are roughly PRs per month: 766 commits on react-x11 since July. Across everything under it and around it (components, ntk, node-x11, dbus-native, the backends) it is about 2,300 merged PRs. Leave the obvious question hanging (how, from nine quiet years?): the answer is coding agents, and it's in the lessons at the end.
+After that it went fast. Each commit on master is a squash-merged PR, so the bars are roughly PRs per month: 766 commits on react-x11 since July. Across everything under it and around it (components, ntk, node-x11, dbus-native, the backends) it is about 2,300 merged PRs. Leave the obvious question hanging (how, from nine quiet years?): the answer is coding agents, and it's in the lessons at the end. What all those PRs built, and what #4 actually changed, opens "Under the hood".
 
 Next slide: it works!
 

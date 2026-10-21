@@ -8,7 +8,155 @@ export const section = "Backup";
 
 <Notes>
 
-Not part of the talk. The rest of the earlier deck, in its original order, for Q&A.
+Not part of the talk. First the two follow-along steps that came out of "Let's build together", for a room that wants more code; then the rest of the earlier deck, in its original order, for Q&A.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/counter.jsx · run: npx tsx counter.jsx">
+
+<h2 style={{ width: 1400 }}>Step 3: your own button</h2>
+
+<Shot src="img/counter.png" alt="The counter window: the number 1 above a blue +1 button" width={200} height={120} style={{ position: 'absolute', left: 1592, top: 72 }} />
+
+<Cols template="640px 1fr" gap={16}>
+<Col>
+
+<Code pad={24}>
+
+```jsx
+import React, { useState } from 'react';
+import { createRoot } from 'react-x11';
+
+function Counter() {
+  const [n, setN] = useState(0);
+  return (
+    <window title="counter"
+      width={300} height={180}>
+      <box style={s.center}>
+        <text style={s.big}>{n}</text>
+        <box style={s.button}
+          onClick={() => setN(n + 1)}>
+          <text style={s.label}>+1</text>
+        </box>
+      </box>
+    </window>
+  );
+}
+```
+
+</Code>
+
+</Col>
+<Col gap={20}>
+
+<Code pad={24}>
+
+```jsx
+const s = {
+  center: { flexGrow: 1, gap: 16,
+    alignItems: 'center', justifyContent: 'center' },
+  big: { fontSize: 40 },
+  label: { color: 'white', fontSize: 18 },
+  button: {
+    backgroundColor: '#2563eb', borderRadius: 8, padding: 12,
+    ':hover': { backgroundColor: '#1d4ed8' },
+    ':active': { backgroundColor: '#1e3a8a' },
+  },
+};
+
+const root = await createRoot();
+root.render(<Counter />);
+```
+
+</Code>
+
+<Small><O>:hover</O> and <O>:active</O> are repainted by the renderer, with no React render. Hold the mouse down and watch.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Moved out of "Let's build together": the live react-x11 dev demo now types this button in instead. Use it if someone asks how a button is made without the Button component.
+
+Step three builds the button from step 1 yourself, out of a box. Nothing here is react-x11 specific on the React side: useState, an onClick handler, a re-render.
+
+Two things are worth pointing out. The button is just a box with an onClick: events are hit-tested against the node tree and bubble like the DOM. And the style has :hover and :active blocks: those are applied by the renderer as a repaint of that one box, not by React state, so they appear on the press itself.
+
+Hold the mouse button down on +1 and the button darkens before you release; the count changes on release, because that is when a click is. That is the "answer the input, not the outcome" rule from the design notes, and it is the kind of thing worth trying on your own machine.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/todo.jsx · run: npx tsx todo.jsx · ev.value is the text after the edit">
+
+<h2 style={{ width: 1400 }}>Step 4: an input and a list</h2>
+
+<Shot src="img/todo.png" alt="The todo window: a text field reading 'Ask quest' above two bullet items, 'Try react-x11' and 'Show the demo'" width={144} height={120} style={{ position: 'absolute', left: 1648, top: 72 }} />
+
+<Cols template="640px 1fr" gap={16}>
+<Col gap={20}>
+
+<Code pad={24}>
+
+```jsx
+import React, { useState } from 'react';
+import { createRoot } from 'react-x11';
+
+function Todo() {
+  const [items, setItems] =
+    useState(['Try react-x11']);
+  const [draft, setDraft] = useState('');
+  const add = () => {
+    if (!draft.trim()) return;
+    setItems([...items, draft]);
+    setDraft('');
+  };
+```
+
+</Code>
+
+<Small>A controlled <O>{'<textinput>'}</O>: **onChange** per edit, **onSubmit** on Enter. Undo, selection, copy and paste are built in.</Small>
+
+</Col>
+<Col>
+
+<Code pad={24}>
+
+```jsx
+  return (
+    <window title="todo" width={360} height={300}>
+      <box style={{ flexGrow: 1, padding: 16, gap: 10 }}>
+        <textinput value={draft} onSubmit={add}
+          placeholder="What next? Press Enter"
+          onChange={(ev) => setDraft(ev.value)}
+          style={{ padding: 8, borderRadius: 6,
+                   borderWidth: 1, borderColor: '#888' }} />
+        {items.map((item, i) => <text key={i}>• {item}</text>)}
+      </box>
+    </window>
+  );
+}
+
+const root = await createRoot();
+root.render(<Todo />);
+```
+
+</Code>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Moved out of "Let's build together". Use it if the check-in shows people want a next step, or for a question about text input.
+
+Step four is a tiny to-do list, the classic. A controlled textinput: value comes from state, onChange gets a synthetic event whose value is the text after the edit, and onSubmit fires on Enter.
+
+Everything a native text field should do comes for free: caret and selection with the mouse, double-click to select a word, undo and redo, copy and paste through the system clipboard, a right-click edit menu. The list is plain React: map over an array and render a text per item.
+
+Things to try once it runs: type something and press Enter; drag-select inside the field; resize the window and watch flexbox reflow; and on Linux, run it over ssh -X from another machine.
 
 </Notes>
 </Slide>
@@ -273,69 +421,6 @@ A detail for the very curious: React runs the mutation pass at discrete event pr
 </Notes>
 </Slide>
 
-<Slide source="finalizeInitialChildren runs after each createInstance (two elided for space)">
-
-## Mounting one tree: the real call order
-
-<Cols template="1fr 1fr" gap={32}>
-<Col gap={12}>
-
-<Eyebrow tone="blue">Render phase</Eyebrow>
-
-```js
-// beginWork: top-down
-getRootHostContext()
-getChildHostContext(ctx, 'window')
-getChildHostContext(ctx, 'box')
-getChildHostContext(ctx, 'text')
-// completeWork: bottom-up
-createTextInstance('hi')
-createInstance('text')
-appendInitialChild(text, hi)
-finalizeInitialChildren(text)
-createInstance('box')
-appendInitialChild(box, text)
-createInstance('window')
-appendInitialChild(window, box)
-```
-
-</Col>
-<Col gap={12}>
-
-<Eyebrow tone="orange">Commit phase</Eyebrow>
-
-```js
-prepareForCommit()
-appendChildToContainer(app, window)
-  └ attachTopLevel
-    └ window.realize()
-      CreateWindow, props, child windows
-resetAfterCommit()
-  └ flushWindowRestacks()
-  └ flushWindowMaps()
-      MapWindow
-// layout pass
-commitMount(…) only where
-  finalizeInitialChildren
-  returned true
-```
-
-</Col>
-</Cols>
-
-<Notes>
-
-Walk through this slowly; it is the most useful slide for anyone writing a renderer. beginWork goes down the tree and computes host context for each host element. completeWork comes back up, so the deepest node is created first: the text chunk, then text, then the box, then the window. Each parent is created after its children and immediately given them through appendInitialChild.
-
-By the end of the render phase there is a complete, detached tree of react-x11 nodes, with yoga nodes, and zero X11 requests sent.
-
-The commit then makes exactly one call for the whole thing, appendChildToContainer with the window. react-x11 turns that into realize(), which creates the X window and recurses into child windows. Mapping waits for resetAfterCommit, so a tree of windows appears at once.
-
-commitMount runs later, in the layout pass, only for instances whose finalizeInitialChildren returned true.
-
-</Notes>
-</Slide>
-
 <Slide>
 
 ## The trap: two "append"s, two phases
@@ -512,59 +597,6 @@ This is the real createInstance, trimmed. Every built-in element is a class from
 The node keeps its fiber for two reasons: React DevTools can map a host instance back to a component, and error messages can name the component that rendered the element, which matters when the error comes from three layers down (ntk, yoga, the X server).
 
 The same rule applies to the foreign element, which embeds another process's window: a reparent issued from a render that React then discards would have moved someone else's window for real.
-
-</Notes>
-</Slide>
-
-<Slide source="src/nodes/window/window.js:318 (simplified)">
-
-## realize(): the window is born in the commit
-
-<Cols template="1fr 640px" gap={40}>
-<Col>
-
-```js
-realize(parentWindow) { // commit only
-  const natural = this._measure();
-  attrs.width = natural.width;
-  attrs.height = natural.height;
-  attrs.parent = parentWindow;
-  attrs.backgroundPixel = pixelFor(bg);
-  attrs.eventMask |= WINDOW_EVENT_MASK;
-  const wnd = app.createWindow(attrs);
-  this._attachWindowListeners();
-  for (const c of this.children)
-    if (c.isWindow) c.realize(wnd);
-  this._realizeChildWindows(); // glarea…
-  applyWindowStates(wnd, …);
-  this._applyTransientFor(…);
-  // MapWindow: in resetAfterCommit
-}
-```
-
-</Col>
-<Col gap={22}>
-
-**Lay out first.** An auto-sized window is created at its final size, with no resize jump after mapping.
-
-**Parent at creation.** Top-down, so there's never a ReparentWindow.
-
-**Background pixel.** The server fills newly exposed area with the theme colour, so no white flash on resize.
-
-**State before map.** EWMH state and WM\_TRANSIENT\_FOR are read when the WM frames the window: open fullscreen without flashing.
-
-</Col>
-</Cols>
-
-<Notes>
-
-realize() is the commit-phase walk the twins slide asked for. It is called from appendChildToContainer for a top-level window, from a mounted parent's insertBefore for a nested one, and from commitMount for a popup.
-
-Order matters at every step. Layout runs before CreateWindow, so a window whose size is auto is born the right size; doing it afterwards means a window mapped at a default size and corrected a frame later. The parent is known at creation because realization is top-down.
-
-The background pixel is what X paints into newly exposed area before the app has drawn it, so setting it to the colour about to be painted makes a resize flash invisible.
-
-And window-manager state (fullscreen, maximized, transient-for, decorations, XDND awareness) is written before the map, because an unmapped window declares its initial state while a mapped one has to ask. Mapping itself is deferred to resetAfterCommit so a tree of windows appears at once.
 
 </Notes>
 </Slide>

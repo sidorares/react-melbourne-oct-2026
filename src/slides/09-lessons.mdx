@@ -1,8 +1,17 @@
 export const section = "Lessons learned";
 
-<Slide theme="dark" layout="statement" gap={36}>
+<Slide theme="dark" layout="statement">
 
-<Eyebrow tone="orange">Lessons learned · 1</Eyebrow>
+# Lessons learned · 1
+
+<Notes>
+
+A beat before the lesson itself. Let the title sit, then click.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" gap={36}>
 
 # Programming is still fun
 
@@ -31,7 +40,7 @@ Nine years: 4 PRs to react-x11. Since July: **2,287 PRs** across nine repos. The
 
 <Card variant="top" tone="blue" title="Good DX is agent DX">
 
-Errors that say what to change. Types that are the ground truth. A headless test that renders a PNG you can look at. What helps a newcomer helps an agent.
+The AIDX slide, seen from the maintainer's side: what helps a newcomer helps an agent, only more so.
 
 </Card>
 
@@ -49,7 +58,7 @@ Draft: say this in your own words, from your own experience. This is the answer 
 
 Not like before: compare it with how node-x11 and the 2015 prototype were written, by hand, evenings. What you do now is mostly deciding, reviewing and looking; the next lesson is the "looking" part.
 
-Good DX: everything an agent needs is what a human newcomer needs, only more so. react-x11's AGENTS.md has a rule, "an error you hit is an error an app developer will hit": every error should say what was expected, what was found and what to change. The stack is written in a way an agent can verify alone: react-x11/test renders into an in-process X server and writes a PNG, which is also how the one-shot agents from the start of the talk are checking their apps right now.
+Good DX: a callback to the AIDX slide in "Let's build together", so keep it short. Everything an agent needs is what a human newcomer needs, only more so. react-x11's AGENTS.md has a rule, "an error you hit is an error an app developer will hit": every error should say what was expected, what was found and what to change. The stack is written in a way an agent can verify alone: react-x11/test renders into an in-process X server and writes a PNG, which is also how the one-shot agents from the start of the talk are checking their apps right now.
 
 Good architecture: with this much change going in, structure is what keeps it from turning into mush. Layers with small, sharp contracts (the host config; @react-x11/components may only use public host elements, and a missing hook becomes a core issue). Invariants pinned by tests (a blitted scroll is byte-identical to a full repaint). Performance as CI gates (frames painted for a window nobody can see). And pre-release, no backwards compatibility: a rename lands everywhere in one PR, because the agent does the tedious part.
 
