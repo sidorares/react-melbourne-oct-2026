@@ -1,12 +1,15 @@
 // Renders the follow-along examples headlessly, into node-x11's in-process
 // X server, and saves what each window shows: the screenshots on the
-// "Try it" slides (public/img/hello.png, counter.png, todo.png).
+// "Try it" slides (public/img/app.png, hello.png, counter.png, todo.png).
 //
 //   cd examples && npm install
 //   node --import tsx ../tools/render-examples.mjs [font.ttf]
+//   ONLY=app node --import tsx ../tools/render-examples.mjs   # just one
 //
 // Each example is run unchanged except for one line: `createRoot()` gets the
-// in-process connection instead of opening the desktop's. The counter is
+// in-process connection instead of opening the desktop's. app.jsx has no
+// createRoot: it is mounted the way `react-x11 dev` mounts it, its default
+// export inside dev's own window. The counter is
 // clicked and the to-do list typed into through their own handlers before
 // the second capture. Default font: Arial from macOS.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -50,7 +53,8 @@ async function capture(app, name) {
   console.log(`wrote ${out}`);
 }
 
-for (const name of ['hello', 'counter', 'todo']) {
+const names = process.env.ONLY ? process.env.ONLY.split(',') : ['app', 'hello', 'counter', 'todo'];
+for (const name of names) {
   const server = xserver.createServer({ width: 800, height: 600 });
   const [serverEnd, clientEnd] = xserver.createStreamPair();
   server.addClientStream(serverEnd);
@@ -61,16 +65,31 @@ for (const name of ['hello', 'counter', 'todo']) {
   globalThis.__app = app;
 
   // the example, with createRoot() pointed at the in-process server
-  const source = readFileSync(`${examples}${name}.jsx`, 'utf8').replace(
-    'await createRoot()',
-    'await createRoot({ app: globalThis.__app })',
-  );
+  const source =
+    name === 'app'
+      ? // what react-x11 dev does with a default export that renders no window
+        `import React from 'react';
+import { createRoot } from 'react-x11';
+import App from './app.jsx';
+const root = await createRoot({ app: globalThis.__app });
+root.render(<window minWidth={320} minHeight={200} title="app.jsx — react-x11 dev"><App /></window>);
+`
+      : readFileSync(`${examples}${name}.jsx`, 'utf8').replace(
+          'await createRoot()',
+          'await createRoot({ app: globalThis.__app })',
+        );
   const tmp = `${examples}.render-${name}.jsx`;
   writeFileSync(tmp, source);
   await import(pathToFileURL(tmp).href);
   await wait(500);
   const win = app._rootChildren[0];
 
+  if (name === 'app') {
+    for (let i = 0; i < 3; i++) {
+      find(win, (n) => n.props?.onClick).props.onClick({});
+      await wait(100);
+    }
+  }
   if (name === 'counter') {
     find(win, (n) => n.props?.onClick).props.onClick({});
     await wait(100);

@@ -14,7 +14,7 @@ export const section = "Intro";
 
 <Notes>
 
-About two minutes for the intro: what react-x11 is now, then what to expect. History; what a UI toolkit actually is, in three layers; building something together, live; how it works under the hood, mostly through performance; lessons learned.
+The first ten minutes set three things going, so the room has a reason to stay: agents building the audience's ideas, the audience building on their own laptops, and the stress demo. Then the talk proper: history; what a UI toolkit actually is, in three layers; building together, live; how it works under the hood, mostly through performance; lessons learned.
 
 One reveal is held back for later: these slides are not running in Chrome.
 
@@ -30,7 +30,7 @@ One reveal is held back for later: these slides are not running in Chrome.
 
 - Same React, same hooks. The host elements are **{'<window>'}**, **{'<box>'}**, **{'<text>'}**, **{'<image>'}**, **{'<canvas>'}**, **{'<textinput>'}**…
 - Four backends: X11 (pure-JS protocol, works over the network), Cocoa, win32, Wayland
-- Plus **@react-x11/components**: editors, terminal, maps, charts… an HTML engine
+- Plus **@react-x11/components**: editors, terminal, maps, charts, 3D… an HTML engine
 - No DOM, no browser, no Electron
 
 ```jsx
@@ -68,6 +68,12 @@ The screenshot is the tasks example, rendered by the real renderer into node-x11
 
 <Col gap={24}>
 
+<Numbered n="0" size="lg" tone="orange">
+
+**Three things to start**: agents building your ideas, you building on your laptop, a demo
+
+</Numbered>
+
 <Numbered n="1" size="lg">
 
 **History**: a 2015 gif, nine quiet years, three busy months
@@ -82,7 +88,7 @@ The screenshot is the tasks example, rendered by the real renderer into node-x11
 
 <Numbered n="3" size="lg">
 
-**Let's build together**: from an empty file, live
+**Let's build together**: state, input, hot reload, live
 
 </Numbered>
 
@@ -94,7 +100,7 @@ The screenshot is the tasks example, rendered by the real renderer into node-x11
 
 <Numbered n="5" size="lg">
 
-**Lessons learned**
+**Lessons learned**, and what the agents built
 
 </Numbered>
 
@@ -102,7 +108,7 @@ The screenshot is the tasks example, rendered by the real renderer into node-x11
 
 <Notes>
 
-Set expectations: a lot of breadth, a few live demos, one joke slide in the middle.
+Set expectations: a lot of breadth, a few live demos, one joke slide in the middle. Item 0 happens right now, in the next five minutes.
 
 </Notes>
 </Slide>
@@ -111,15 +117,256 @@ Set expectations: a lot of breadth, a few live demos, one joke slide in the midd
 
 # An experiment
 
-<Lead>What should I build in one shot, while I talk?</Lead>
+<Lead>Give me three desktop app ideas</Lead>
 
-<Small style={{ fontSize: 30 }}>An agent starts now with your idea, react-x11 and its components. We look at what it made at the very end.</Small>
+<Small style={{ fontSize: 30 }}>An agent starts on each one now, with react-x11 and its components. We look at what they made at the very end.</Small>
 
 <Notes>
 
-Take the first idea that is a desktop app and not a website. Start it from the deck repo's oneshot/ folder (oneshot/README.md has the exact command and the prompt template). The folder's AGENTS.md tells the agent what react-x11 and @react-x11/components are, and DESIGN.md how a Mac app should look.
+Take the first three ideas that are desktop apps and not websites; vary them if you can (something with data, something with text, something playful). Type them straight in:
 
-Leave it running on the laptop, out of the projected screen. Check back on the last slide before Thanks.
+`cd oneshot && ./start.sh "idea one" "idea two" "idea three"`
+
+Each gets its own folder under oneshot/runs/ and its own Terminal window, behind the deck. oneshot/README.md has the details. The folder's AGENTS.md tells each agent what react-x11 and @react-x11/components are, and DESIGN.md how a Mac app should look. They run headless, so no window pops up over the slides.
+
+Glance at the Terminal windows between sections if one seems stuck. Check back on the last slides, before Thanks.
+
+</Notes>
+</Slide>
+
+<Slide source="examples/README.md · website: Getting started">
+
+## Your turn: install
+
+<Cols template="1fr 600px" gap={48}>
+<Col gap={32}>
+
+<Code size={34}>
+
+```bash
+$ mkdir hello-x11 && cd hello-x11
+$ npm init -y
+$ npm install react-x11 react
+```
+
+</Code>
+
+<Small>That's all for step 1. Step 2 adds `tsx`, or use Bun.</Small>
+
+</Col>
+<Col gap={20}>
+
+**Node 22.15+** for hot reload (20.19 runs apps). Nothing compiles: the X11 protocol is JavaScript, layout is WASM, native bridges come prebuilt.
+
+| On        | You get                    |
+| --------- | -------------------------- |
+| macOS     | a native Cocoa window      |
+| Linux     | X11 on your $DISPLAY       |
+| Windows   | the win32 backend (young)  |
+| ssh -X    | the window on your laptop  |
+
+</Col>
+</Cols>
+
+<Notes>
+
+Now the audience's turn: get it running on your own machine while I talk, it takes a minute. Three commands. Leave this slide up a little longer than feels natural; people are typing.
+
+Requirements: Node 22.15 or newer for react-x11 dev, the hot-reload command on the next slide (it needs module.registerHooks); apps themselves run on Node 20.19. There is nothing to compile: node-x11 and ntk are pure JavaScript, yoga is WebAssembly, and the macOS and Windows bridges are prebuilt optional dependencies. On a Mac you get a native Cocoa window, on Linux an X11 window on your display, on Windows the young win32 backend; and if you ssh -X into a Linux box, the window appears on your laptop, drawn over the network.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/app.jsx · screenshot rendered from this file, mounted the way react-x11 dev mounts it, after three clicks">
+
+## Step 1: one component, hot reloaded
+
+<Cols template="1110px 1fr" gap={48}>
+<Col gap={24}>
+
+<Code size={26}>
+
+```jsx
+import React, { useState } from 'react';
+import { Button } from 'react-x11';
+
+export default function App() {
+  const [n, setN] = useState(0);
+  return (
+    <box style={{ padding: 24, gap: 12, alignItems: 'center' }}>
+      <text style={{ fontSize: 24 }}>You clicked {n} times</text>
+      <Button onPress={() => setN(n + 1)}>Click me</Button>
+    </box>
+  );
+}
+```
+
+</Code>
+
+</Col>
+<Col gap={24}>
+
+<Shot src="img/app.png" alt="A react-x11 dev window: 'You clicked 3 times' above a 'Click me' button, on a dark grey background" width={480} height={300} />
+
+<Code size={26} pad={24}>
+
+```bash
+$ npx react-x11 dev app.jsx
+```
+
+</Code>
+
+<Small>No window, no `createRoot`: dev mounts the default export in a window of its own. Save, and it reloads with the count kept. The first run offers to install the hot-reload toolchain: say **Y**.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+The smallest react-x11 app there is: one file, one component, one export. Save it as app.jsx and run react-x11 dev on it.
+
+Plain React: useState and a Button from react-x11's built-in widgets, with onPress. The host elements are box, a flexbox container, and text, the only place raw strings may go. Styles go in the style prop and mean what CSS means.
+
+dev does the rest: it mounts the default export, and because the component renders no window, it puts it in one of its own. Change the label and save: Fast Refresh swaps the component and the count stays. On the first run it says it needs Babel and react-refresh, which are optional peer dependencies so apps don't ship them, and asks to install them; answer Y. Option-click the button and your editor opens at its line.
+
+The screenshot is this file, rendered headlessly with dev's window around it, after three clicks.
+
+</Notes>
+</Slide>
+
+<Slide gap={32} source="examples/hello.jsx · screenshot rendered by this exact file; the default theme follows the desktop's light or dark mode">
+
+## Step 2: your own window, <Mono>hello.jsx</Mono>
+
+<Cols template="1030px 1fr" gap={40}>
+<Col>
+
+```jsx
+import React from 'react';
+import { createRoot } from 'react-x11';
+
+function App() {
+  return (
+    <window title="hello" width={360} height={180}>
+      <box style={{ flexGrow: 1,
+        alignItems: 'center', justifyContent: 'center' }}>
+        <text style={{ fontSize: 24 }}>hello from react-x11</text>
+      </box>
+    </window>
+  );
+}
+
+const root = await createRoot();
+root.render(<App />);
+```
+
+</Col>
+<Col>
+
+<Shot src="img/hello.png" alt="The hello window: 'hello from react-x11' centred on a dark grey background" width={540} height={270} />
+
+<Code size={26}>
+
+```bash
+$ npm pkg set type=module
+$ npm install -D tsx
+$ npx tsx hello.jsx
+```
+
+</Code>
+
+<Small>Or just `bun hello.jsx`. Only <O>{'<window>'}</O> is a real window; the rest is drawn into it.</Small>
+
+</Col>
+</Cols>
+
+<Notes>
+
+Step 2 is what an app looks like without dev: it opens its own window and mounts its own root. This is the shape a real app's entry file has.
+
+Three host elements: window, box and text. A window is a real window of the operating system; box is a flexbox container laid out by yoga; text is a run of text, and raw strings are only allowed inside it.
+
+Styles go in the style prop, never as flat props, and mostly mean what CSS means: flexGrow, alignItems, justifyContent. The window's width and height are props, not style, because they are the real window's geometry.
+
+createRoot connects to whatever this machine has, Cocoa on a Mac and X11 elsewhere, and render mounts synchronously.
+
+Running it needs two more commands. `npm pkg set type=module`, because the file calls `await createRoot()` at the top level, which needs an ES module, and npm init writes `"type": "commonjs"`; tsx then refuses with an error about top-level await and the cjs output format. And tsx itself, to run JSX on Node. Bun runs the .jsx file directly and does not care about either, so with Bun it is just `bun hello.jsx`. The screenshot is exactly this file, rendered headlessly; the dark background is the default theme following the desktop's dark mode.
+
+</Notes>
+</Slide>
+
+<Slide gap={40} source="examples/ in the deck repo: app, hello, counter, todo · the docs site: elements, styling, components">
+
+## Your turn: build something while I talk
+
+<Cols template="1fr 1fr" gap={56} align="start">
+<Col gap={20}>
+
+<Eyebrow>Need an idea?</Eyebrow>
+
+- A world clock for the people you work with
+- A tiny notes or todo app (persist with `createSettings`)
+- A dashboard of something you care about: `fetch` works
+- A soundboard, a timer, a dice roller
+
+<Small>Hooks, `fetch` and plain JS libraries work. `<div>`, CSS files and web UI kits don't: it's `<box>` and `style`.</Small>
+
+</Col>
+<Col gap={20}>
+
+<Eyebrow>Where to look</Eyebrow>
+
+<p className="mono" style={{ fontSize: 26 }}>sidorares.github.io/react-x11</p>
+
+<Small>docs: elements, styling, events, the built-in widgets</Small>
+
+<p className="mono" style={{ fontSize: 26 }}>npm install @react-x11/components</p>
+
+<Small>charts, tables, editors, markdown, maps, 3D</Small>
+
+<p className="mono" style={{ fontSize: 26 }}>github.com/sidorares/react-melbourne-oct-2026</p>
+
+<Small>these slides, and examples/ with every file from them</Small>
+
+<Card variant="rule" tone="orange" title="Using a coding agent? Fair game">
+
+Show us what you made at the end, next to what mine made.
+
+</Card>
+
+</Col>
+</Cols>
+
+<Notes>
+
+The invitation: don't just watch, build something. It doesn't have to be big; a window with your own data in it counts.
+
+The talk comes back to this in "Let's build together", with step 3 (your own button, :hover and :active) and step 4 (an input and a list), and react-x11 dev's DevTools and click-to-component. Ask then how people are going.
+
+</Notes>
+</Slide>
+
+<Slide theme="dark" layout="statement" gap={40}>
+
+<Eyebrow tone="orange">Demo</Eyebrow>
+
+# For inspiration
+
+<Code size={34}>
+
+```bash
+cd demo && npm start
+```
+
+</Code>
+
+<Small>Every component in one native window, driven by a script. Nothing recorded. Steal any of it.</Small>
+
+<Notes>
+
+While people install: the stress-demo trailer in demo/, so they know what is possible before deciding what to build: a code editor edited mid-file, a million-row table, rich text, a kanban dragged about, a vector map flight, a flow graph re-wired, charts, markdown streamed, an HTML magazine, video, 3D, a terminal flood, then six scenes at once.
+
+It waits on the title card until Start, or Return, Space, → or Page Down, so the clicker drives it. Run `npm run prefetch` beforehand so the map tiles and the video clip are local. `--only=map,flow` plays a subset if time is short.
 
 </Notes>
 </Slide>

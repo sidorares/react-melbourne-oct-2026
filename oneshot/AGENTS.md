@@ -9,7 +9,8 @@ and finish with something that **runs and looks good**.
 - **No questions back.** Where the idea is vague, pick the version that makes
   the best 30-second demo, and write the decision down. A small app that works
   and looks native beats a big one that crashes.
-- **Build in `./app/`** (create it). Write only inside this `oneshot/` folder.
+- **Build in `./app/`** (create it). Write only inside the folder you were started in (`oneshot/`, or your own
+  `oneshot/runs/N-idea/` when several ideas are built at once).
   Do not touch the parent repo, do not `git commit`, do not install anything
   globally, do not edit files in the reference repos listed below.
 - **Keep `app/NOTES.md`**: a few lines per decision (what you assumed, what you
@@ -311,7 +312,8 @@ its tests and was obvious in a screenshot.
    window, misaligned rows, a hard-coded colour that ignores dark mode, a
    control with no hover/press feedback. Re-shoot. Two or three passes.
 4. Run `npm start` once more without `SNAPSHOT` in the background for ~5 s to
-   confirm it stays up with no errors in the output, then stop it.
+   confirm it stays up with no errors in the output, then stop it. With
+   `ONESHOT_NO_WINDOWS` set, skip this too: `npm test` passing is the check.
 
 Errors are written to be read: an unknown element lists the valid ones, a flat
 style prop shows the fix. Read the message before guessing.

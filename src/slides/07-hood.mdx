@@ -85,7 +85,7 @@ render() uses updateContainerSync + flushSyncWork, so a mount is applied before 
 
 This is the slide for anyone who has written a renderer and put side effects in createInstance or appendChild, which is exactly the mistake I made.
 
-The next few slides unpack it: what the render phase is allowed to do, what order the commit runs in, and the trap that two callbacks with nearly the same name live in different phases.
+The next slide is where it lands in react-x11: which elements become windows in the commit, and which are plain objects built in render. If there are questions, the backup slides unpack it: what the render phase is allowed to do (Render builds a tree nobody sees yet), what order the commit runs in (The commit, in order), and the trap that two callbacks with nearly the same name live in different phases (The trap: two "append"s, two phases).
 
 </Notes>
 </Slide>
@@ -185,7 +185,7 @@ It is also why events are synthetic: X only knows that the pointer is in the win
 
 <Notes>
 
-Follow the counter from the start of the talk. The X server sends a ButtonPress, a 32-byte event. node-x11 decodes it; ntk's Window object emits mousedown (and coalesces motion to one per frame). react-x11's EventManager subscribes to each window once, never per element, and reads handlers from node.props at dispatch time, so a handler is never stale. It hit-tests the retained node tree front to back, in paint order, and dispatches a synthetic event with capture and bubble phases.
+Follow the counter we just built. The X server sends a ButtonPress, a 32-byte event. node-x11 decodes it; ntk's Window object emits mousedown (and coalesces motion to one per frame). react-x11's EventManager subscribes to each window once, never per element, and reads handlers from node.props at dispatch time, so a handler is never stale. It hit-tests the retained node tree front to back, in paint order, and dispatches a synthetic event with capture and bubble phases.
 
 The handler runs inside runWithPriority(Discrete), so setN lands on SyncLane. The dispatcher's discrete wrapper then calls flushSyncWork, which renders and commits immediately: the text chunk gets commitTextUpdate, nodes whose parents re-rendered get commitUpdate and therefore applyProps. Changed nodes call invalidate, which records a damage rect on the owning window.
 

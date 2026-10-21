@@ -453,53 +453,6 @@ The rule that keeps it honest: a pixel test asserts every blitted frame is byte-
 </Notes>
 </Slide>
 
-<Slide gap={36} source="captured from ntk 8.23.2 + node-x11's in-process server · ntk docs/text.md, docs/shared-glyphs.md">
-
-## Upload once, keep it on the server
-
-<Cols template="1fr 600px" gap={48}>
-<Col gap={16}>
-
-One **GlyphSet** per (face, size). `AddGlyphs` for "Type": ids we choose, 0–3, and a GLYPHINFO each:
-
-| glyph  | local id |   w × h |     x, y | xOff: stored advance |
-| ------ | -------: | ------: | -------: | -------------------: |
-| T (55) |        0 | 20 × 23 |    0, 23 |       **<O>20</O>** |
-| y (92) |        1 | 16 × 24 |    0, 17 |       **<O>16</O>** |
-| p (83) |        2 | 16 × 24 |   −2, 17 |       **<O>18</O>** |
-| e (72) |        3 | 16 × 18 |   −1, 17 |       **<O>18</O>** |
-
-Plus the a8 coverage bitmaps: **1,592 bytes**, sent once. The server now moves its own pen by xOff.
-
-</Col>
-<Col gap={18}>
-
-**Ids are ours.** Compact per set, so one byte per glyph until a size has used 256 glyphs.
-
-**Rasterizer:** signed-area accumulation from fontkit outlines, analytic antialiasing. ~25 µs for a 20 px icon.
-
-**Bounded:** 8 MB LRU of uploaded bitmaps; a cold (face, size) is freed with FreeGlyphSet.
-
-**Shared:** ntk apps on one display share glyph sets (\_NTK\_GLYPHD). Each later app skips ~8 ms and ~11.5 KB per face and size.
-
-**Huge sizes** (over 256 px) go as trapezoids: bitmaps grow with size², outlines with √size.
-
-</Col>
-</Cols>
-
-<Notes>
-
-This table is the real AddGlyphs request ntk sent for the word Type, captured off the socket. XRender lets the client choose glyph ids, so ntk numbers glyphs 0, 1, 2, 3 per glyph set rather than using the font's own ids (55, 92, 83, 72). That keeps every id under 256 for a typical UI size, which means the 8-bit variant of CompositeGlyphs, one byte per glyph on every draw.
-
-Each GLYPHINFO says how big the bitmap is, where it sits relative to the glyph origin, and xOff: how far the server should move its pen after drawing it. ntk stores the rounded default advance there, so for ordinary text the server walks the pen itself and the client sends nothing per glyph but the id.
-
-Bitmaps come from ntk's own rasterizer over fontkit's outlines, signed-area accumulation as in font-rs and stb_truetype, which gives exact antialiasing with no supersampling. The cache is bounded at 8 MB per connection, and since ntk 8 the glyph sets can be shared between processes on the same display through a small directory protocol, so the second app showing the same UI font rasterizes and uploads nothing.
-
-Very large text, over 256 px, is sent as trapezoids instead, because a cached bitmap costs size squared while an outline costs roughly the square root of the size.
-
-</Notes>
-</Slide>
-
 <Slide gap={32} source="bytes as captured on the socket; the second draw of the same word sends this request and nothing else">
 
 ## 52 bytes draw a kerned word
@@ -537,6 +490,8 @@ Very large text, over 256 px, is sent as trapezoids instead, because a cached bi
 Unkerned text is one elt: 8 bytes, then **1 byte per glyph**. Each kern, mark or drift opens a new elt. A 60-character line costs ~70 bytes.
 
 <Notes>
+
+Before this request, the glyphs went up once, the first time Arial 32 was drawn: one AddGlyphs with each glyph's bitmap and a stored advance, ids 0 to 3 that ntk chose (backup: Upload once, keep it on the server). After that, drawing is only this.
 
 This is the punchline of the text section, and every byte on it is real: captured from the socket while ntk drew the word Type in Arial at 32 px, and the picture is the server's own output, read back and magnified.
 

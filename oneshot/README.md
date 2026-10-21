@@ -18,11 +18,30 @@ Code starts in this folder, reads `CLAUDE.md` (a symlink to
    `../demo`. Don't clean up that worktree before the talk.
 4. Screen awake, not locked, Do Not Disturb on.
 
-## Starting the run
+## Starting the runs: one agent per idea
 
 ```bash
 cd ~/Projects/react-melbourne-oct-2026/oneshot
-rm -rf app                     # fresh start
+./start.sh "a pomodoro timer with a task list" "a recipe book" "a synth"
+```
+
+Each idea gets its own folder, `runs/N-slug/` (AGENTS.md, CLAUDE.md and
+DESIGN.md linked in, the filled-in `prompt.txt` saved), and its own Terminal
+window running Claude Code there, building `runs/N-slug/app/`. Three ideas is
+plenty: they share the laptop's CPU and the npm cache.
+
+The agents run with `ONESHOT_NO_WINDOWS=1`: they check their app through the
+headless renderer's PNGs and never open a real window, so nothing pops up over
+the slides. `ONESHOT_WINDOWS=1 ./start.sh …` lets them open windows for native
+screenshots (better results, but put the deck on its own Space first).
+
+`rm -rf runs` before the next talk.
+
+## Starting a single run by hand
+
+```bash
+cd ~/Projects/react-melbourne-oct-2026/oneshot
+rm -rf app                     # fresh start (start.sh uses runs/ instead)
 IDEA="a pomodoro timer with a task list"     # what the audience said
 claude "$(sed "s|<AUDIENCE IDEA>|$IDEA|" prompt.txt)" \
   --permission-mode auto \
@@ -76,13 +95,13 @@ opening the app and app/README.md explaining it. Aim to be done in about
 ## At the end of the talk
 
 ```bash
-cd app && npm start          # the app
-cat NOTES.md                 # what it decided and what it cut
-npm run dev                  # optional: hot reload, edit live on stage
+cd runs/1-*/app && npm start   # each idea in turn (or app/ for a single run)
+cat NOTES.md                   # what it decided and what it cut
+npm run dev                    # optional: hot reload, edit live on stage
 ```
 
 If `npm start` dies on launch: `REACT_X11_THREADED=0 npm start` (keeps the
 JS on the main thread), or `bun app.jsx`. Toggle System Settings →
 Appearance to dark while it runs — it should follow live.
 
-`app/` is not committed anywhere; delete it before the next run.
+`app/` and `runs/` are git-ignored; delete them before the next run.

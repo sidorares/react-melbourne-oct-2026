@@ -9,6 +9,7 @@ export const section = "Components";
 <Grid cols={4} gap={20}>
 <Card dense title="Vector maps" />
 <Card dense title="Code + code editor" />
+<Card dense title="Rich text editor" />
 <Card dense title="Terminal output + terminal" />
 <Card dense title="Streaming markdown" />
 <Card dense title="Charts" />
@@ -17,15 +18,34 @@ export const section = "Components";
 <Card dense title="Flow" />
 <Card dense title="Table and Tree, virtual lists" />
 <Card dense title="QML, with hot reload" />
-<Card dense variant="top" tone="orange" title="A full HTML renderer: CSS, JS, Acid3" />
 <Card dense variant="dashed" title="…and the smaller ones" />
+</Grid>
+
+<Grid cols={2} gap={20}>
+
+<Card dense variant="top" tone="orange" title="Scene3D: react-three-fiber compatible">
+
+`<mesh>`, `useFrame`, `extend()` as in r3f, with no three.js and no WebGL: drawn into `<glarea>`, over GLX or straight to the GPU
+
+</Card>
+
+<Card dense variant="top" tone="orange" title="A full HTML renderer">
+
+CSS, JS, Acid3. Built from the same host elements as everything else here
+
+</Card>
+
 </Grid>
 
 <Notes>
 
 All of these are in @react-x11/components, and all are built from the public host elements, with no private hooks into core. When a component needs something core doesn't expose, that becomes a core issue.
 
-You saw most of them in the demo already. Keep the HTML one in mind for the next slide.
+You saw most of them in the demo already. Two are big enough to call out.
+
+Scene3D, the galaxy shot in the demo: a react-three-fiber-shaped scene graph, same element names, prop shapes, attach, useFrame, useThree, extend(), so an r3f component ports with its structure intact. Underneath there is no three.js and no WebGL. It is a second React reconciler drawing into core's `<glarea>`, the 3D escape hatch from the toolkit slide: indirect GLX (GL 1.x encoded into the X connection, survives ssh -X, no shaders), or direct GL ES 2 on the GPU (DRI3 on Linux, CGL into a CALayer on macOS) with shaderMaterial and post-processing. Same JSX on all of them. The galaxy was 200,000 stars as one points draw, moved entirely by uniforms.
+
+Keep the HTML one in mind for the next slide.
 
 </Notes>
 </Slide>
@@ -66,6 +86,8 @@ The reveal: this deck is running in the react-x11-components demo browser, not i
 An X client draws a web page, which runs an X server, which draws an X client. The playground bundles the real renderer with node-x11, its in-process X server and a GLX-over-WebGL2 emulator, and compiles your JSX in the page.
 
 If the frame stays empty in the demo browser, click the link, or switch to Chrome for this one slide.
+
+Then back to laptops: the next slides check in on what the audience is building.
 
 </Notes>
 </Slide>
