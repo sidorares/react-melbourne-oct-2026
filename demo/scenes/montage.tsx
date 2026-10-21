@@ -2,8 +2,8 @@
 // scrolls past them in eased glides, its section headers sticking to the
 // top as their sections go by.
 //
-// Everything on the page is live while it scrolls: a pipeline advances, a
-// calendar's range grows, a colour picker's hue turns, switches flip and
+// Everything on the page is live while it scrolls: a git graph grows a
+// commit at a time, a pipeline advances, a calendar's range grows, a colour picker's hue turns, switches flip and
 // sliders slide — each on its own beat, a state change at a time. The
 // headers are core's `position: 'sticky'`, held by the scroll pane in the
 // pass that scrolls it, so a glide is still a copy of what stayed.
@@ -24,6 +24,7 @@ import { Calendar } from '@react-x11/components/calendar';
 import type { CalendarDay } from '@react-x11/components/calendar';
 import { ColorPicker } from '@react-x11/components/color-picker';
 import { Formula } from '@react-x11/components/formula';
+import { Mermaid } from '@react-x11/components/mermaid';
 import {
   Timeline,
   TimelineConnector,
@@ -38,7 +39,16 @@ import { glide, useTick } from '../clock.js';
 import type { SceneProps } from '../scene.js';
 import { findScroller } from '../scroll.js';
 import type { Scroller } from '../scroll.js';
-import { ACCENT, GROUND, INK, MUTED, PANEL } from '../shell.js';
+import {
+  ACCENT,
+  ACCENT_2,
+  DIM,
+  GROUND,
+  HOT,
+  INK,
+  MUTED,
+  PANEL,
+} from '../shell.js';
 
 const SECTION_H = 470;
 const HEADER_H = 64;
@@ -50,6 +60,31 @@ const FORMULAS = [
   '\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}',
 ];
 
+// a prefix of it is shown, a line at a time, so `partial` holds the last
+// graph that compiled while a `branch` waits for its first commit
+const HISTORY = [
+  'gitGraph',
+  '  commit id: "init"',
+  '  branch mermaid',
+  '  commit id: "scene.ts"',
+  '  commit id: "node.ts"',
+  '  checkout main',
+  '  commit id: "html fix"',
+  '  checkout mermaid',
+  '  commit id: "fence"',
+  '  checkout main',
+  '  merge mermaid',
+  '  commit id: "0.27.0" tag: "v0.27.0"',
+];
+
+// ondine draws in one ink; the pie's slices take the trailer's accents
+const PIE_VARS = {
+  '--ondine-series-1': ACCENT,
+  '--ondine-series-2': ACCENT_2,
+  '--ondine-series-3': HOT,
+  '--ondine-series-4': DIM,
+};
+
 const STAGES = ['Checkout', 'Install', 'Build', 'Test', 'Sign', 'Publish'];
 
 /** Where the page stands, in px, at each moment: a glide to each section
@@ -57,7 +92,7 @@ const STAGES = ['Checkout', 'Install', 'Build', 'Test', 'Sign', 'Publish'];
 function stops(): (readonly [number, number])[] {
   const out: (readonly [number, number])[] = [[0, 0]];
   let t = 650;
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 5; i++) {
     out.push([t, (i - 1) * SECTION_H]);
     t += 620;
     out.push([t, i * SECTION_H]);
@@ -75,6 +110,7 @@ export function MontageScene({
   const box = useRef(null);
   const pane = useRef<Scroller | null>(null);
   const [beat, setBeat] = useState(0);
+  const [diagramBeat, setDiagramBeat] = useState(0);
   const [hue, setHue] = useState(220);
   const [slider, setSlider] = useState(0.2);
 
@@ -84,12 +120,14 @@ export function MontageScene({
     // the discrete things move on a beat, a tenth of a second or so
     const b = Math.floor(t / 110);
     if (b !== beat) setBeat(b);
-    // the smooth ones every frame, but only while they can be seen
+    // the diagrams recompile only while their section is on screen
     const y = p?.y() ?? 0;
-    if (y > SECTION_H * 2 && y < SECTION_H * 4) {
+    if (y < SECTION_H * 2 && b !== diagramBeat) setDiagramBeat(b);
+    // the smooth ones every frame, but only while they can be seen
+    if (y > SECTION_H * 3 && y < SECTION_H * 5) {
       setHue(Math.round(220 + ((t / 6) % 360)) % 360);
     }
-    if (y > SECTION_H * 3) setSlider(0.5 + 0.45 * Math.sin(t / 260));
+    if (y > SECTION_H * 4) setSlider(0.5 + 0.45 * Math.sin(t / 260));
   });
 
   return (
@@ -104,6 +142,12 @@ export function MontageScene({
               <Formula key={tex} tex={tex} display size={30} />
             ))}
           </box>
+        </Section>
+        <Section
+          title="Mermaid"
+          note="Compiled by ondine, drawn natively — and selectable"
+        >
+          <Diagrams beat={diagramBeat} />
         </Section>
         <Section title="Timeline" note="A release pipeline, advancing">
           <Pipeline at={Math.floor(beat / 3) % (STAGES.length + 2)} />
@@ -167,6 +211,33 @@ function Section({
         <text style={{ fontSize: 17, color: MUTED }}>{note}</text>
       </box>
       <box style={{ flexGrow: 1, padding: 8 }}>{children}</box>
+    </box>
+  );
+}
+
+function Diagrams({ beat }: { beat: number }): ReactElement {
+  const lines = 2 + (Math.floor(beat / 3) % (HISTORY.length - 1));
+  const paint = Math.round(64 + 10 * Math.sin(Math.floor(beat / 4) / 1.5));
+  const pie = `pie title Where a frame goes
+  "React" : 6
+  "layout" : ${88 - paint}
+  "paint" : ${paint}
+  "present" : 6`;
+  return (
+    <box
+      style={{
+        flexDirection: 'row',
+        gap: 60,
+        paddingTop: 10,
+        alignItems: 'flex-start',
+      }}
+    >
+      <Mermaid
+        source={HISTORY.slice(0, lines).join('\n')}
+        partial
+        fontSize={18}
+      />
+      <Mermaid source={pie} fontSize={16} vars={PIE_VARS} />
     </box>
   );
 }

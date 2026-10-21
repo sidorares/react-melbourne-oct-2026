@@ -322,7 +322,7 @@ const ALL_SHOTS: Shot[] = [
       kicker: '08',
       big: 'Streamed',
       title: 'Markdown as it arrives',
-      subtitle: 'Never raw syntax · tables, code and TeX mid-stream',
+      subtitle: 'Never raw syntax · tables, code, TeX and diagrams mid-stream',
     },
     8600,
     (p) => <MarkdownScene {...p} />,
@@ -378,9 +378,10 @@ const ALL_SHOTS: Shot[] = [
       kicker: '13',
       big: 'And the rest',
       title: 'The smaller pieces',
-      subtitle: 'Formula · Timeline · Color picker · Calendar · core widgets',
+      subtitle:
+        'Formula · Mermaid · Timeline · Color picker · Calendar · core widgets',
     },
-    7300,
+    8800,
     (p) => <MontageScene {...p} />,
   ),
   ...scene(
