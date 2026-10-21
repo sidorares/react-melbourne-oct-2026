@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { collectSlides } from './collect.js';
-import { Stage, UNSCALED } from './Stage.jsx';
+import { Stage } from './Stage.jsx';
 import { Presenter } from './Presenter.jsx';
 import { StepContext } from './steps.js';
 
@@ -214,21 +214,16 @@ export function Deck({ sections }) {
   return (
     <div
       className="deck"
-      style={UNSCALED ? { position: 'absolute' } : undefined}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
     >
       <StepContext.Provider value={step}>
         <Stage label={index + 1}>{slides[index].element}</Stage>
       </StepContext.Provider>
-      {/* drawn over a cropped slide's iframe, it keeps the example
-          browser from mounting the frame (see UNSCALED) */}
-      {!UNSCALED && (
-        <div
-          className="deck__progress"
-          style={{ width: `${((index + 1) / count) * 100}%` }}
-        />
-      )}
+      <div
+        className="deck__progress"
+        style={{ width: `${((index + 1) / count) * 100}%` }}
+      />
     </div>
   );
 }
