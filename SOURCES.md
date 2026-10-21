@@ -30,6 +30,53 @@ those bodies. Nothing was re-measured for the talk except where marked
   (`tools/render-examples.mjs`). `paddingHorizontal` is not a supported
   style key (it throws), which is why the counter uses `padding`.
 
+## Let's build together
+
+- `npx react-x11 dev`: the bin is `src/cli/index.js`, whose only command is
+  `dev`; the error window is `src/cli/errorwindow.js` (`describeError` is
+  pure). DevTools and click-to-component: `docs/devtools.md`,
+  `docs/click-to-component.md`.
+- AIDX slide, "already there": `oneshot/AGENTS.md` and `oneshot/DESIGN.md`
+  in this repo; `toPNG` in react-x11's `docs/testing.md`. "Next" is a list
+  of proposals, none of which exists. `create-react-x11` and
+  `@react-x11/create` were both unclaimed on npm on 21 October 2026
+  (`npm view` returns 404).
+- "Agent Experience (AX)": Mathias Biilmann (Netlify), early 2025. Not
+  re-checked for the talk.
+- Steps 3 and 4 (counter, todo) moved to Backup; their sources are under
+  "Try it".
+
+## Under the hood: before and after #4
+
+- The two commits, both 26 July 2026: `c43453f` "create X11 windows
+  top-down in the commit phase" (Fixes #4; 3 files, +145 −86, mostly
+  `src/Reconciler.js`) and `1a9afcd` "retained widget renderer with yoga
+  layout, synthetic events, and drawn elements" (22 files, +3,956 −587).
+- **Captured** 21 October 2026 from react-x11's git history: lines of every
+  `.js/.ts/.jsx/.tsx/.mjs` file under `src/` (comments and blank lines
+  included), via `git ls-tree` + `git show`, so the working tree does not
+  matter.
+
+  | | commit | src lines | src code files | test lines |
+  | --- | --- | ---: | ---: | ---: |
+  | #4 closed | `c43453f` | 411 | 3 | 262 |
+  | 2.51.0 | `f97c1be` | 133,949 | 334 | 144,517 |
+
+- The breakdown on the "411 lines became 134,000" slide (`<CodeShare />`),
+  by file, first rule that matches:
+
+  | area | rule | lines | share |
+  | --- | --- | ---: | ---: |
+  | Reconciler.js | `src/Reconciler.js` | 1,078 | 0.8% |
+  | Types | any `.d.ts`, and `src/types/` | 9,899 | 7.4% |
+  | Platform backends | `src/cocoa/`, `src/wayland/`, `src/win32/` | 36,599 | 27.3% |
+  | Retained tree and painting | `src/nodes/`, `src/backend/`, `frames`, `pacing`, `paintcache`, `compositing`, `yoga`, `offscreen` | 27,521 | 20.5% |
+  | Built-in components | `src/components/` | 8,287 | 6.2% |
+  | DX | `src/cli/`, `src/refresh/`, `src/testing/`, `DevToolsIntegration`, `ClickToComponent`, `editor`, `trace-registry`, `debug` | 6,423 | 4.8% |
+  | Desktop and input | everything else: events, focus, styles, fonts, a11y, menus, tray, DnD, clipboard, DBus, `src/frame/` | 44,142 | 33.0% |
+
+  react-x11 only: ntk, node-x11 and react-x11-components are not counted.
+
 ## Overview
 
 - Backends, the layer split and the "how often vs how" division:

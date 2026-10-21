@@ -1,198 +1,18 @@
 export const section = "Let’s build together";
 
-<Slide gap={40}>
+<Slide layout="statement" gap={40}>
 
-## The developer experience
+<Eyebrow tone="orange">Check-in</Eyebrow>
 
-<Grid cols={3} gap={24}>
+# How are you going?
 
-<Card title="Testing">
-
-`react-x11/test`: Testing Library style, headless, against an X server in the same process
-
-</Card>
-
-<Card title="Profiling">
-
-`REACT_X11_TRACE`, damage flashing, `npm run bench`, Perfetto traces
-
-</Card>
-
-<Card title="Hot reload">
-
-React Fast Refresh: edit, save, state survives
-
-</Card>
-
-<Card title="Click to component">
-
-⌥-click anything and your editor opens at the JSX line
-
-</Card>
-
-<Card title="Inspectors / DevTools">
-
-React DevTools, with hover highlight in the real window
-
-</Card>
-
-<Card title="Types">
-
-hand-written `.d.ts`: a typo in a style key is an error
-
-</Card>
-
-</Grid>
+<Lead>Who has a window up? Who built something past hello world?</Lead>
 
 <Notes>
 
-Back from the browser to your own machine. This is the part that decides whether anyone uses a toolkit, and the next few slides are the demo: steps 3 and 4, after the two the audience started at the beginning, then react-x11 dev live.
+Back from the browser to your own machine. Ask for hands: who has a window up, who got past hello world. If someone has, and wants to, put it on screen for a minute.
 
-</Notes>
-</Slide>
-
-<Slide gap={32} source="examples/counter.jsx · run: npx tsx counter.jsx">
-
-<h2 style={{ width: 1400 }}>Step 3: your own button, and a press you can see</h2>
-
-<Shot src="img/counter.png" alt="The counter window: the number 1 above a blue +1 button" width={200} height={120} style={{ position: 'absolute', left: 1592, top: 72 }} />
-
-<Cols template="640px 1fr" gap={16}>
-<Col>
-
-<Code pad={24}>
-
-```jsx
-import React, { useState } from 'react';
-import { createRoot } from 'react-x11';
-
-function Counter() {
-  const [n, setN] = useState(0);
-  return (
-    <window title="counter"
-      width={300} height={180}>
-      <box style={s.center}>
-        <text style={s.big}>{n}</text>
-        <box style={s.button}
-          onClick={() => setN(n + 1)}>
-          <text style={s.label}>+1</text>
-        </box>
-      </box>
-    </window>
-  );
-}
-```
-
-</Code>
-
-</Col>
-<Col gap={20}>
-
-<Code pad={24}>
-
-```jsx
-const s = {
-  center: { flexGrow: 1, gap: 16,
-    alignItems: 'center', justifyContent: 'center' },
-  big: { fontSize: 40 },
-  label: { color: 'white', fontSize: 18 },
-  button: {
-    backgroundColor: '#2563eb', borderRadius: 8, padding: 12,
-    ':hover': { backgroundColor: '#1d4ed8' },
-    ':active': { backgroundColor: '#1e3a8a' },
-  },
-};
-
-const root = await createRoot();
-root.render(<Counter />);
-```
-
-</Code>
-
-<Small><O>:hover</O> and <O>:active</O> are repainted by the renderer, with no React render. Hold the mouse down and watch.</Small>
-
-</Col>
-</Cols>
-
-<Notes>
-
-Back to the laptops: ask who has a window up, and who built something past hello world. If someone has, and wants to, put it on screen for a minute.
-
-Step three builds the button from step 1 yourself, out of a box. Nothing here is react-x11 specific on the React side: useState, an onClick handler, a re-render.
-
-Two things are worth pointing out. The button is just a box with an onClick: events are hit-tested against the node tree and bubble like the DOM. And the style has :hover and :active blocks: those are applied by the renderer as a repaint of that one box, not by React state, so they appear on the press itself.
-
-Hold the mouse button down on +1 and the button darkens before you release; the count changes on release, because that is when a click is. That is the "answer the input, not the outcome" rule from the design notes, and it is the kind of thing worth trying on your own machine.
-
-</Notes>
-</Slide>
-
-<Slide gap={32} source="examples/todo.jsx · run: npx tsx todo.jsx · ev.value is the text after the edit">
-
-<h2 style={{ width: 1400 }}>Step 4: an input and a list</h2>
-
-<Shot src="img/todo.png" alt="The todo window: a text field reading 'Ask quest' above two bullet items, 'Try react-x11' and 'Show the demo'" width={144} height={120} style={{ position: 'absolute', left: 1648, top: 72 }} />
-
-<Cols template="640px 1fr" gap={16}>
-<Col gap={20}>
-
-<Code pad={24}>
-
-```jsx
-import React, { useState } from 'react';
-import { createRoot } from 'react-x11';
-
-function Todo() {
-  const [items, setItems] =
-    useState(['Try react-x11']);
-  const [draft, setDraft] = useState('');
-  const add = () => {
-    if (!draft.trim()) return;
-    setItems([...items, draft]);
-    setDraft('');
-  };
-```
-
-</Code>
-
-<Small>A controlled <O>{'<textinput>'}</O>: **onChange** per edit, **onSubmit** on Enter. Undo, selection, copy and paste are built in.</Small>
-
-</Col>
-<Col>
-
-<Code pad={24}>
-
-```jsx
-  return (
-    <window title="todo" width={360} height={300}>
-      <box style={{ flexGrow: 1, padding: 16, gap: 10 }}>
-        <textinput value={draft} onSubmit={add}
-          placeholder="What next? Press Enter"
-          onChange={(ev) => setDraft(ev.value)}
-          style={{ padding: 8, borderRadius: 6,
-                   borderWidth: 1, borderColor: '#888' }} />
-        {items.map((item, i) => <text key={i}>• {item}</text>)}
-      </box>
-    </window>
-  );
-}
-
-const root = await createRoot();
-root.render(<Todo />);
-```
-
-</Code>
-
-</Col>
-</Cols>
-
-<Notes>
-
-Step four is a tiny to-do list, the classic. A controlled textinput: value comes from state, onChange gets a synthetic event whose value is the text after the edit, and onSubmit fires on Enter.
-
-Everything a native text field should do comes for free: caret and selection with the mouse, double-click to select a word, undo and redo, copy and paste through the system clipboard, a right-click edit menu. The list is plain React: map over an array and render a text per item.
-
-Things to try once it runs: type something and press Enter; drag-select inside the field; resize the window and watch flexbox reflow; and on Linux, run it over ssh -X from another machine.
+If people are stuck, the usual two: `"type": "module"` missing for tsx, and Node older than 22.15 for react-x11 dev. The next steps people were going to take, a button of their own and a todo list, are in examples/ (counter.jsx, todo.jsx); their slides are in Backup if the room wants them.
 
 </Notes>
 </Slide>
@@ -247,11 +67,128 @@ DevTools: the tree, props, highlight in the window
 
 <Notes>
 
-Pick up step 1's app.jsx, the one the audience ran at the start. Add a box, a button with a :hover block, a counter. Break it on purpose once (render a raw string outside a text) to show the error window, then fix and save. Click a few times, save an edit, and the count survives. ⌥-click the button to jump to the line. Hover a component in DevTools and it highlights in the real window.
+Pick up step 1's app.jsx, the one the audience ran at the start. Add a box with an onClick and a :hover and an :active block: that is a button of your own, and it counts. Hold the mouse down on it: it darkens before you release, because :hover and :active are repainted by the renderer, with no React render; the count changes on release, because that is when a click is.
+
+Break it on purpose once (render a raw string outside a text) to show the error window, then fix and save. Click a few times, save an edit, and the count survives. ⌥-click the button to jump to the line. Hover a component in DevTools and it highlights in the real window.
 
 Before the talk: check the react-x11 you demo includes the dev + DevTools default, and that react-devtools-core is installed in the demo folder.
 
-Keep the counter on screen as the segue: next is what happens, layer by layer, when you click that +1.
+Keep the counter window open: the last slide of the next section follows one click on it.
+
+</Notes>
+</Slide>
+
+<Slide gap={32}>
+
+## The developer experience
+
+<Code size={30} pad={24}>
+
+```bash
+$ npx react-x11 dev app.jsx
+```
+
+</Code>
+
+<Grid cols={3} gap={24}>
+
+<Card variant="top" tone="blue" title="Hot reload">
+
+React Fast Refresh: edit, save, state survives
+
+</Card>
+
+<Card variant="top" tone="blue" title="Click to component">
+
+⌥-click anything and your editor opens at the JSX line
+
+</Card>
+
+<Card variant="top" tone="blue" title="Inspectors / DevTools">
+
+React DevTools, with hover highlight in the real window
+
+</Card>
+
+<Card title="Testing">
+
+`react-x11/test`: Testing Library style, headless, against an X server in the same process
+
+</Card>
+
+<Card title="Profiling">
+
+`REACT_X11_TRACE`, damage flashing, `npm run bench`, Perfetto traces
+
+</Card>
+
+<Card title="Types">
+
+hand-written `.d.ts`: a typo in a style key is an error
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+A recap of what they just saw, the top row, and the three they didn't, the bottom row. One command gives you the top row; nothing to configure.
+
+This is the part that decides whether anyone uses a toolkit. The bottom row is what keeps an app working after the first afternoon: tests that run without a display, a trace when something is slow, types that catch a style key spelled wrong.
+
+Next: the same list, asked again for when the developer is an agent.
+
+</Notes>
+</Slide>
+
+<Slide gap={36} source="oneshot/AGENTS.md · oneshot/DESIGN.md · docs/testing.md (toPNG) · src/cli/errorwindow.js">
+
+<Eyebrow>AIDX · or AX, agent experience</Eyebrow>
+
+## The AI-assisted developer experience
+
+<Lead style={{ fontSize: 34 }}>react-x11 is younger than every model's training data. The library has to ship its own context.</Lead>
+
+<Cols template="1fr 1fr" gap={56} align="start">
+<Col gap={16}>
+
+<Eyebrow tone="blue">Already there</Eyebrow>
+
+- **AGENTS.md + DESIGN.md**: what the three agents from the start are reading
+- **`react-x11/test`** renders a PNG an agent can look at
+- **Errors that say what to change**, and `.d.ts` as the ground truth
+
+</Col>
+<Col gap={16}>
+
+<Eyebrow tone="orange">Next: what would you want?</Eyebrow>
+
+- **`npm create react-x11`**: AGENTS.md, DESIGN.md, a test, the dev script
+- **Docs inside the package**, versioned with the code: a skill, not a website
+- **"Copy as prompt"** in the dev error window
+- **`react-x11 dev --mcp`**: the agent sees the tree, clicks, takes a screenshot
+- **llms.txt** and "copy as Markdown" on the docs site
+
+</Col>
+</Cols>
+
+<Notes>
+
+The argument: react-x11 has had 752 merged PRs since July and renamed things freely before 2.0. No model was trained on it. Whatever an agent knows about react-x11, the project has to hand it, and it has to match the installed version, not last month's.
+
+Already there: the oneshot folder is the proof. AGENTS.md says what react-x11 and the components are; DESIGN.md says how a Mac app should look. The agents running behind the deck have only those two files and npm. react-x11/test's toPNG is how they check their own work: an agent can't see a window, but it can read a PNG. And errors written as "what was expected, what was found, what to change" help an agent exactly as much as a person.
+
+Next, none of which exists yet, so ask the room:
+- `npm create react-x11` runs create-react-x11 (both that name and @react-x11/create are free on npm). The scaffold writes the agent files, a smoke test and a dev script, and removes the "type: module, install tsx" detour from step 2.
+- Docs shipped in node_modules match the installed version, which a website and a model's memory don't.
+- The error window already builds its text in one pure function (describeError); a "Copy as prompt" button adds the code frame, the component stack, the version and the backend.
+- An MCP server in dev mode would be Playwright for native windows: the DevTools plumbing already holds the tree.
+
+On the name: "Agent Experience (AX)" is Mathias Biilmann's term, from Netlify, early 2025; AIDX is ours for tonight. Check the attribution before saying it.
+
+Questions for the room: where should agent docs live, the site, the package, or a skill registry? Should errors be written for people, or for agents that explain them to people? Is DESIGN.md the new design system?
+
+Segue: everything so far, the dev command, the test harness, the stress demo, sits on code that did not exist in July. Back to issue #4.
 
 </Notes>
 </Slide>

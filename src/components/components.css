@@ -699,3 +699,44 @@
   border-radius: 8px;
   font-size: 24px;
 }
+
+/* CodeShare */
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.share__row {
+  display: grid;
+  grid-template-columns: 500px 1fr;
+  gap: 24px;
+  align-items: center;
+}
+.share__name {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.share__detail {
+  font-size: 20px !important;
+  line-height: 1.3;
+  color: var(--fg-muted) !important;
+}
+.share__track {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.share__bar {
+  height: 36px;
+  min-width: 6px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--tone);
+}
+.share__value {
+  font-family: var(--mono);
+  font-size: 22px;
+  white-space: nowrap;
+  color: var(--tone) !important;
+}
