@@ -9,7 +9,8 @@ and finish with something that **runs and looks good**.
 - **No questions back.** Where the idea is vague, pick the version that makes
   the best 30-second demo, and write the decision down. A small app that works
   and looks native beats a big one that crashes.
-- **Build in `./app/`** (create it). Write only inside this `oneshot/` folder.
+- **Build in `./app/`** (create it). Write only inside the folder you were started in (your own
+  `oneshot/runs/N-idea/`).
   Do not touch the parent repo, do not `git commit`, do not install anything
   globally, do not edit files in the reference repos listed below.
 - **Keep `app/NOTES.md`**: a few lines per decision (what you assumed, what you
@@ -56,9 +57,9 @@ mkdir -p app && cd app
     "test": "REACT_X11_NO_AUTORUN=1 node --import tsx --test test/*.test.jsx"
   },
   "dependencies": {
-    "@react-x11/components": "^0.25.0",
+    "@react-x11/components": "^0.26.0",
     "react": "^19.3.0",
-    "react-x11": "^2.50.0"
+    "react-x11": "^2.51.0"
   },
   "devDependencies": {
     "@babel/core": "^8.0.0",
@@ -235,30 +236,42 @@ core's `<video src="/abs/file.mp4" autoPlay />`.
 
 ## Where to look things up — read before writing code
 
-Read 2–3 examples close to your idea **before** writing your first component,
-and grep the installed `.d.ts` for every prop you are unsure of — it is the
-version you actually run.
+You have what anyone who ran `npm install` has, and the public docs. No
+checkout of either library: read the installed packages, and fetch the docs
+sites. Read 2–3 examples close to your idea **before** writing your first
+component, and grep the installed `.d.ts` for every prop you are unsure of —
+it is the version you actually run.
 
-- Installed types (ground truth): `app/node_modules/react-x11/src/index.d.ts`,
-  `app/node_modules/react-x11/src/types/{elements,components,style,events}.d.ts`,
-  `app/node_modules/@react-x11/components/dist/<name>/index.d.ts`.
-- Core docs: `/Users/laplace/Projects/react-x11/.claude/worktrees/video-support-cocoa-2b2333/docs/`
-  — `elements.md`, `styling.md`, `components.md`, `events.md`,
-  `appearance.md`, `globalmenu.md`, `testing.md`, `system.md`,
-  `filedialog.md`, `notifications.md`, `macos.md` (long; grep it).
-  (If that path is gone: `/Users/laplace/Projects/react-x11/docs/`.)
-- Core examples (same repo, `examples/`): `finder.jsx` and `settings.jsx`
-  (sidebar + content, Mac-like), `tasks.jsx` (list + input), `widgets.jsx`
-  (every control), `dashboard.jsx`, `monitor.jsx` (big live list),
-  `schedule.jsx` (sticky grid), `timer.jsx`, `menu.jsx`, `theming.jsx`,
-  `form/`. `examples/README.md` is the tour.
-- Components docs: `/Users/laplace/Projects/react-x11-components/docs/components/<name>.md`;
-  examples: `/Users/laplace/Projects/react-x11-components/examples/<name>.tsx`;
-  overview: its `README.md`.
-- A working app using both packages:
-  `/Users/laplace/Projects/react-melbourne-oct-2026/demo/` (`scenes/*.tsx`
-  show charts, table, code, markdown, flow, map, rich text in use).
-  Tiny starters: `/Users/laplace/Projects/react-melbourne-oct-2026/examples/`.
+- **Installed packages (ground truth)**, after `npm install` in `app/`:
+  - `app/node_modules/react-x11/README.md` — the overview, elements, 3D, hot
+    reload, TypeScript; `app/node_modules/react-x11/src/index.d.ts` and
+    `src/types/{elements,components,style,events}.d.ts` — every element,
+    style key, event and built-in widget with its props.
+  - `app/node_modules/@react-x11/components/README.md` — every component with
+    a short example; `app/node_modules/@react-x11/components/dist/<name>/index.d.ts`
+    — its props. The source ships too (`src/<name>/`), for when a type is not
+    enough.
+- **Core docs**, one page per topic:
+  `https://sidorares.github.io/react-x11/docs/reference/<topic>` —
+  `elements`, `styling`, `components` (the built-in widgets), `events`,
+  `appearance`, `globalmenu`, `testing`, `system`, `filedialog`,
+  `notifications`, `macos` (long). Start from
+  `https://sidorares.github.io/react-x11/docs/getting-started`.
+- **Component docs**:
+  `https://sidorares.github.io/react-x11-components/docs/reference/components/<name>`
+  — `charts`, `table`, `tree`, `tabs`, `markdown`, `code-editor`,
+  `rich-text-editor`, `calendar`, `color-picker`, `timeline`, `reorder`,
+  `flow`, `formula`, `html`, `maps`, `three`, `terminal`.
+- **Core examples** (not in the npm package; on GitHub, fetch the raw files):
+  `https://raw.githubusercontent.com/sidorares/react-x11/master/examples/<file>` —
+  `finder.jsx` and `settings.jsx` (sidebar + content, Mac-like), `tasks.jsx`
+  (list + input), `widgets.jsx` (every control), `dashboard.jsx`,
+  `monitor.jsx` (big live list), `schedule.jsx` (sticky grid), `timer.jsx`,
+  `menu.jsx`, `theming.jsx`; `README.md` is the tour.
+- **In this repository** (the talk's own code, next to this folder):
+  `../../../demo/` — a working app using both packages (`scenes/*.tsx` show
+  charts, table, code, markdown, flow, map, rich text in use); and
+  `../../../examples/` — tiny starters.
 
 ## Verify — run it and LOOK at it
 
@@ -311,7 +324,8 @@ its tests and was obvious in a screenshot.
    window, misaligned rows, a hard-coded colour that ignores dark mode, a
    control with no hover/press feedback. Re-shoot. Two or three passes.
 4. Run `npm start` once more without `SNAPSHOT` in the background for ~5 s to
-   confirm it stays up with no errors in the output, then stop it.
+   confirm it stays up with no errors in the output, then stop it. With
+   `ONESHOT_NO_WINDOWS` set, skip this too: `npm test` passing is the check.
 
 Errors are written to be read: an unknown element lists the valid ones, a flat
 style prop shows the fix. Read the message before guessing.

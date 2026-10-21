@@ -66,7 +66,7 @@ To check the production build locally: `npm run build && npm run preview`.
 
 ## The examples
 
-[examples/](examples) holds `hello.jsx`, `counter.jsx` and `todo.jsx`, the
+[examples/](examples) holds `app.jsx`, `hello.jsx`, `counter.jsx` and `todo.jsx`, the
 same files the slides show. See [examples/README.md](examples/README.md).
 
 ## Regenerating the images
@@ -74,7 +74,7 @@ same files the slides show. See [examples/README.md](examples/README.md).
 ```bash
 cd examples && npm install
 node ../tools/capture-glyphs.mjs              # the Text section's bytes and type-glyphs.png
-node --import tsx ../tools/render-examples.mjs   # hello.png, counter.png, todo.png
+node --import tsx ../tools/render-examples.mjs   # app.png, hello.png, counter.png, todo.png
 ```
 
 Both draw into node-x11's in-process X server, so no display is needed. With

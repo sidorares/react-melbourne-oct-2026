@@ -15,6 +15,47 @@ Recently watched Terence Tao and 3Blue1Brown on AI in mathematics. The parallel:
 </Notes>
 </Slide>
 
+<Slide gap={40} source="merged PRs, 1 July – 21 October 2026: core 752 · components 799 · ntk 399 · dbus-native 107 · node-x11 83 · appkit, win32, wayland 117 · node-x11-dri 30">
+
+<Eyebrow>Lessons learned · 1, continued</Eyebrow>
+
+## What working with agents changed
+
+<Grid cols={3} gap={32}>
+
+<Card variant="top" tone="muted" title="Not like before">
+
+Nine years: 4 PRs to react-x11. Since July: **2,287 PRs** across nine repos. The bottleneck moved from writing the code to deciding what to build and checking that it is right.
+
+</Card>
+
+<Card variant="top" tone="blue" title="Good DX is agent DX">
+
+Errors that say what to change. Types that are the ground truth. A headless test that renders a PNG you can look at. What helps a newcomer helps an agent.
+
+</Card>
+
+<Card variant="top" tone="orange" title="Good architecture is guard rails">
+
+Sharp contracts between layers: the host config, components on public elements only. Invariants pinned by tests, performance as CI gates. The rules written down, in the repo.
+
+</Card>
+
+</Grid>
+
+<Notes>
+
+Draft: say this in your own words, from your own experience. This is the answer to the question the Evolution slide raised: how does a project go from nine quiet years to 2,287 merged PRs since July? That is across nine repositories: react-x11 752, react-x11-components 799, ntk 399, dbus-native 107, node-x11 83, the windowkit backends (appkit 94, win32 16, wayland 7) and node-x11-dri 30. Before July, from April 2017 to June 2026, the same repositories merged 65 between them, and react-x11 itself 4. react-x11's AGENTS.md alone is 1,885 lines; ntk and react-x11-components have their own.
+
+Not like before: compare it with how node-x11 and the 2015 prototype were written, by hand, evenings. What you do now is mostly deciding, reviewing and looking; the next lesson is the "looking" part.
+
+Good DX: everything an agent needs is what a human newcomer needs, only more so. react-x11's AGENTS.md has a rule, "an error you hit is an error an app developer will hit": every error should say what was expected, what was found and what to change. The stack is written in a way an agent can verify alone: react-x11/test renders into an in-process X server and writes a PNG, which is also how the one-shot agents from the start of the talk are checking their apps right now.
+
+Good architecture: with this much change going in, structure is what keeps it from turning into mush. Layers with small, sharp contracts (the host config; @react-x11/components may only use public host elements, and a missing hook becomes a core issue). Invariants pinned by tests (a blitted scroll is byte-identical to a full repaint). Performance as CI gates (frames painted for a window nobody can see). And pre-release, no backwards compatibility: a rename lands everywhere in one PR, because the agent does the tedious part.
+
+</Notes>
+</Slide>
+
 <Slide gap={40} source="react-x11#413 · AGENTS.md: Check it on a real display">
 
 <Eyebrow>Lessons learned · 2</Eyebrow>
@@ -56,13 +97,13 @@ The blur bug was found by hovering a card and feeling the lag. No metric moved u
 
 # The web platform is huge
 
-<Lead>~490 commits into the HTML engine since mid-August, and still going</Lead>
+<Lead>~500 commits into the HTML engine since mid-August, and still going</Lead>
 
 <Small style={{ fontSize: 28 }}>This week alone: `@property` · `mask-composite` · repeating gradients · `-webkit-line-clamp` · styled input buttons</Small>
 
 <Notes>
 
-Those are the last five commits in the HTML engine, and each one is something a real page relied on. Acid3 passes most of its 100 tests (check the latest number before saying one).
+Each of those is something a real page relied on. The list goes stale daily: refresh it the day before from `git log --oneline -- src/html` in react-x11-components (on 21 October: 495 commits, and the newest were animated GIF and WebP, sticky boxes that scroll by blit, and contenteditable for CodeMirror). Acid3 passes most of its 100 tests (check the latest number before saying one).
 
 </Notes>
 </Slide>
@@ -71,11 +112,15 @@ Those are the last five commits in the HTML engine, and each one is something a 
 
 <Eyebrow>The experiment</Eyebrow>
 
-# What did it build?
+# What did they build?
+
+<Lead>And what did you build?</Lead>
 
 <Notes>
 
-Switch to the oneshot window. Read out the idea the audience gave, run what the agent made (its README says how), and skim its NOTES.md for what it decided and what it couldn't do. Whatever it is, it is a fair data point.
+Switch to the oneshot Terminal windows. For each idea in oneshot/runs/: read out the idea, run what the agent made (`cd runs/N-*/app && npm start`), and skim its NOTES.md for what it decided and what it couldn't do. Whatever they are, they are fair data points.
+
+Then the audience: anyone who built something on their laptop and wants to show it.
 
 </Notes>
 </Slide>

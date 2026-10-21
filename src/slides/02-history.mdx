@@ -99,7 +99,7 @@ Windows created **top-down, in the commit**. Then rapid iterations:
 
 Issue #4: windows were created bottom-up, children before their parents, so everything had to be reparented and staged. The fix was to make no display calls in render at all, and to create windows top-down in the commit phase, each one naming its real parent from the start. Closed 26 July 2026.
 
-After that it went fast. Each commit on master is a squash-merged PR, so the bars are roughly PRs per month.
+After that it went fast. Each commit on master is a squash-merged PR, so the bars are roughly PRs per month: 766 commits on react-x11 since July. Across everything under it and around it (components, ntk, node-x11, dbus-native, the backends) it is about 2,300 merged PRs. Leave the obvious question hanging (how, from nine quiet years?): the answer is coding agents, and it's in the lessons at the end.
 
 Next slide: it works!
 
@@ -114,32 +114,7 @@ Next slide: it works!
 
 Let it land, then: "it works!". Raptor 1 on top, Raptor 3 below: same engine, years apart.
 
-That was react-x11 in July: it existed. Everything since was the "make it good" part.
-
-</Notes>
-</Slide>
-
-<Slide theme="dark" layout="statement" gap={40}>
-
-<Eyebrow tone="orange">Demo</Eyebrow>
-
-# Make it actually good
-
-<Code size={34}>
-
-```bash
-cd demo && npm start
-```
-
-</Code>
-
-<Small>Every component in one native window, driven by a script. Nothing recorded.</Small>
-
-<Notes>
-
-The stress-demo trailer in demo/: a code editor edited mid-file, a million-row table, rich text, a kanban dragged about, a vector map flight, a flow graph re-wired, charts, markdown streamed, an HTML magazine, video, 3D, a terminal flood, then six scenes at once.
-
-It waits on the title card until Start, or Return, Space, → or Page Down, so the clicker drives it. Run `npm run prefetch` beforehand so the map tiles and the video clip are local. `--only=map,flow` plays a subset if time is short.
+That was react-x11 in July: it existed. Everything since was the "make it good" part, and the stress demo at the start is where it got to.
 
 </Notes>
 </Slide>

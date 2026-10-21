@@ -1,3 +1,5 @@
 node_modules
 dist
 .DS_Store
+oneshot/app
+oneshot/runs

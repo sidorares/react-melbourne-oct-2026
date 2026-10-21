@@ -15,11 +15,17 @@ those bodies. Nothing was re-measured for the talk except where marked
 ## Try it
 
 - Install steps and the backend table: `website/docs/getting-started.md`.
+- `react-x11 dev` (step 1): **captured** with react-x11 2.51.0 on Node 26,
+  from an empty folder with only `npm install react-x11 react`: without a
+  terminal it prints the toolchain install line; with the toolchain it mounts
+  `app.jsx` in its own window and reloads on save. It also runs with
+  `"type": "commonjs"`. Node 22.15+ is its own check (`module.registerHooks`,
+  `src/cli/dev.js`).
 - `npm pkg set type=module`: checked with npm 11.12.1, whose `npm init -y`
   writes `"type": "commonjs"`; tsx then fails with "Top-level await is
   currently not supported with the cjs output format". Bun runs the file
   either way.
-- `examples/*.jsx`: **captured** — each rendered without errors into
+- `examples/*.jsx`: **captured** — each rendered (app.jsx inside dev's window) without errors into
   node-x11's in-process X server; the screenshots are those renders
   (`tools/render-examples.mjs`). `paddingHorizontal` is not a supported
   style key (it throws), which is why the counter uses `padding`.
@@ -147,6 +153,29 @@ those bodies. Nothing was re-measured for the talk except where marked
 
 No PR in either repository measures react-x11 over a real network link;
 "works over SSH" is the only remote claim the slides make.
+
+## Lessons learned
+
+- PR counts on "What working with agents changed": **captured** 21 October
+  2026 with GitHub search, `repo:R is:pr is:merged merged:2026-07-01..2026-10-31`,
+  per month, and `merged:2017-04-01..2026-06-30` for the years before.
+
+  | repo | Jul | Aug | Sep | Oct (to the 21st) | since July | Apr 2017 – Jun 2026 |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+  | sidorares/react-x11 | 93 | 204 | 301 | 154 | 752 | 4 |
+  | sidorares/react-x11-components | 0 | 41 | 452 | 306 | 799 | 0 |
+  | sidorares/ntk | 75 | 144 | 130 | 50 | 399 | 1 |
+  | sidorares/dbus-native | 87 | 4 | 13 | 3 | 107 | 42 |
+  | sidorares/node-x11 | 39 | 29 | 10 | 5 | 83 | 18 |
+  | windowkit/appkit | 0 | 0 | 62 | 32 | 94 | 0 |
+  | windowkit/win32 | 0 | 0 | 10 | 6 | 16 | 0 |
+  | windowkit/wayland | 0 | 0 | 7 | 0 | 7 | 0 |
+  | sidorares/node-x11-dri | 0 | 15 | 15 | 0 | 30 | 0 |
+  | **total** | 294 | 437 | 1,000 | 556 | **2,287** | 65 |
+
+  Not counted: windowkit/fontkit (5) and hot-module-replacement (5). The
+  Evolution slide's bars are commits on react-x11's master, not merged PRs:
+  July had direct commits before the PR flow started.
 
 ## Known stale documentation
 
