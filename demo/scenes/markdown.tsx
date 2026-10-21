@@ -6,13 +6,15 @@
 // block the stream is in: the blocks above it keep their nodes and their
 // layout, so a frame costs the paragraph being written, not the document.
 // The fences are the `fences` seam: ```math is a `<Formula>`, typeset by
-// KaTeX's layout as it streams.
+// KaTeX's layout as it streams, and ```mermaid is a `<Mermaid>`, compiled
+// by ondine on every append and holding the last diagram that compiled.
 import { useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 
 import { Formula } from '@react-x11/components/formula';
 import { Markdown } from '@react-x11/components/markdown';
 import type { FenceInfo } from '@react-x11/components/markdown';
+import { Mermaid } from '@react-x11/components/mermaid';
 import { useTick } from '../clock.js';
 import type { SceneProps } from '../scene.js';
 import { findScroller } from '../scroll.js';
@@ -36,6 +38,15 @@ collector~~ the allocation you made — are yours.
 | layout | yoga, and the content floors | a box sized in numbers |
 | paint | the damage, at device pixels | a scroll that copies |
 | present | the swapchain, a memcpy | a layer that moves itself |
+
+\`\`\`mermaid
+flowchart LR
+  S[state change] --> R[React]
+  R --> L[layout]
+  L --> P[paint]
+  P --> X[present]
+  T[scroll] -->|a copy| P
+\`\`\`
 
 The budget, written down:
 
@@ -85,6 +96,18 @@ function* rows(out: (rows: Row[]) => void) {
 1. Start the generators the moment the window is up.
 2. Pump them for a few milliseconds between frames.
 3. Let a scene that arrives early finish the rest **on the spot**.
+
+\`\`\`mermaid
+sequenceDiagram
+  participant F as frame loop
+  participant I as idle pump
+  participant G as rows()
+  F->>I: frame done, 11 ms left
+  I->>G: next()
+  G-->>I: yield, 20,000 rows later
+  I-->>F: back before the deadline
+  F->>F: next frame, on time
+\`\`\`
 
 ## 4. Render the next scene before the cut
 
@@ -306,6 +329,9 @@ change — and everything between them fits in a quarter of the budget.
 const FENCES = {
   math: ({ text, partial }: FenceInfo) => (
     <Formula tex={text} display partial={partial} />
+  ),
+  mermaid: ({ text, partial }: FenceInfo) => (
+    <Mermaid source={text} partial={partial} />
   ),
 };
 
