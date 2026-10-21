@@ -1,33 +1,39 @@
 # One-shot demo — presenter notes
 
-"As an experiment, I'll try to one-shot a demo from your suggestions." Claude
-Code starts in this folder, reads `CLAUDE.md` (a symlink to
-[AGENTS.md](AGENTS.md): the mission, setup, rules, verification loop) and
-[DESIGN.md](DESIGN.md) (how a Mac app should look), and builds the app in
-`./app/` while you talk.
+"As an experiment, I'll try to one-shot a demo from your suggestions." One
+Claude Code session per idea starts in its own folder under `runs/`, reads
+[AGENTS.md](AGENTS.md) (the mission, setup, rules, verification loop, linked
+in as its `CLAUDE.md`) and [DESIGN.md](DESIGN.md) (how a Mac app should
+look), and builds the app while you talk.
+
+It works the way it would for anyone in the audience: react-x11 and
+@react-x11/components installed from npm, the agent reading the installed
+packages (READMEs, `.d.ts`, source) and the public docs sites. No checkout of
+either library is needed, and the deck can be anywhere on the machine.
 
 ## The night before
 
-1. **Rehearse once** with a throwaway idea ("a pomodoro timer with a task
-   list") end to end, then `rm -rf app`.
-2. **Warm the npm cache** (venue Wi-Fi): the rehearsal does it; or
-   `cd "$(mktemp -d)" && npm init -y && npm i react-x11@^2.50 @react-x11/components@^0.25 react@^19.3 tsx pngjs @babel/core@^8 @babel/plugin-transform-react-jsx@^8 hot-module-replacement@^4.0.2 react-refresh@^0.19`.
-3. **Keep the reference checkouts in place** — AGENTS.md points at
-   `/Users/laplace/Projects/react-x11/.claude/worktrees/video-support-cocoa-2b2333`
-   (docs, examples), `/Users/laplace/Projects/react-x11-components` and
-   `../demo`. Don't clean up that worktree before the talk.
-4. Screen awake, not locked, Do Not Disturb on.
+On the machine you will present from (a Mac, with Claude Code installed and
+signed in):
+
+1. `./start.sh --prepare` warms the npm cache with every package the apps
+   install (venue Wi-Fi).
+2. **Rehearse once** with a throwaway idea (`./start.sh "a pomodoro timer with
+   a task list"`) end to end, then `rm -rf runs`.
+3. Screen awake, not locked, Do Not Disturb on.
 
 ## Starting the runs: one agent per idea
 
 ```bash
-cd ~/Projects/react-melbourne-oct-2026/oneshot
+cd oneshot      # in this deck's checkout, wherever it is
 ./start.sh "a pomodoro timer with a task list" "a recipe book" "a synth"
 ```
 
 Each idea gets its own folder, `runs/N-slug/` (AGENTS.md, CLAUDE.md and
 DESIGN.md linked in, the filled-in `prompt.txt` saved), and its own Terminal
-window running Claude Code there, building `runs/N-slug/app/`. Three ideas is
+window running Claude Code there, building `runs/N-slug/app/`. Outside macOS
+it opens a tmux window per agent when run inside tmux, and otherwise prints
+the commands to paste. Three ideas is
 plenty: they share the laptop's CPU and the npm cache.
 
 The agents run with `ONESHOT_NO_WINDOWS=1`: they check their app through the
@@ -37,23 +43,19 @@ screenshots (better results, but put the deck on its own Space first).
 
 `rm -rf runs` before the next talk.
 
-## Starting a single run by hand
+## Starting a run by hand
+
+`./start.sh "one idea"` is a single run. What it runs in each folder, if you
+want to start one yourself:
 
 ```bash
-cd ~/Projects/react-melbourne-oct-2026/oneshot
-rm -rf app                     # fresh start (start.sh uses runs/ instead)
-IDEA="a pomodoro timer with a task list"     # what the audience said
-claude "$(sed "s|<AUDIENCE IDEA>|$IDEA|" prompt.txt)" \
-  --permission-mode auto \
-  --add-dir /Users/laplace/Projects/react-x11/.claude/worktrees/video-support-cocoa-2b2333 \
-            /Users/laplace/Projects/react-x11-components \
-            /Users/laplace/Projects/react-melbourne-oct-2026/demo
+cd runs/1-a-pomodoro-timer-with-a-task-list
+ONESHOT_NO_WINDOWS=1 claude "$(cat prompt.txt)" --permission-mode auto \
+  --add-dir ../../../demo ../../../examples
 ```
 
-(`prompt.txt` is the template below, saved next to this file. Keep the prompt
-**first**: `--add-dir` takes every word after it as a directory, so a prompt
-placed after it would be swallowed. Avoid `|` in the idea, or just paste the
-whole prompt in quotes instead of using `sed`.)
+(Keep the prompt **first**: `--add-dir` takes every word after it as a
+directory, so a prompt placed after it would be swallowed.)
 
 Permission modes (`claude --help`, Claude Code 2.1):
 
@@ -66,8 +68,8 @@ Permission modes (`claude --help`, Claude Code 2.1):
   — never asks. Only if you are comfortable with an agent running anything on
   this laptop unattended; not the default here.
 
-`--add-dir` lets it read the docs and examples outside this folder without
-prompting. Optional: `--effort high`.
+`--add-dir` lets it read the talk's `demo/` and `examples/` without
+prompting; the library docs it fetches from the web. Optional: `--effort high`.
 
 **Windows will pop up.** The verification loop opens the app for ~3 s to
 screenshot it, and the new window takes focus. Either run Claude in a
@@ -95,7 +97,7 @@ opening the app and app/README.md explaining it. Aim to be done in about
 ## At the end of the talk
 
 ```bash
-cd runs/1-*/app && npm start   # each idea in turn (or app/ for a single run)
+cd runs/1-*/app && npm start   # each idea in turn
 cat NOTES.md                   # what it decided and what it cut
 npm run dev                    # optional: hot reload, edit live on stage
 ```
@@ -104,4 +106,4 @@ If `npm start` dies on launch: `REACT_X11_THREADED=0 npm start` (keeps the
 JS on the main thread), or `bun app.jsx`. Toggle System Settings →
 Appearance to dark while it runs — it should follow live.
 
-`app/` and `runs/` are git-ignored; delete them before the next run.
+`runs/` is git-ignored; delete it before the next run.
